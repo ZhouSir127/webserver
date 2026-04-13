@@ -46,7 +46,6 @@ bool http_conn::init()
     memset(m_real_file, '\0', FILENAME_LEN);
 }
 
-
 //从状态机，用于分析出一行内容
 //返回值为行的读取状态，有LINE_OK,LINE_BAD,LINE_OPEN
 HTTP_CODE http_conn::parse_line()
@@ -177,7 +176,6 @@ HTTP_CODE http_conn::parse_request_line()
     }else if(m_url[0] != '/')
         return BAD_REQUEST;
 
-    
     char *m_version = m_start_ptr;
 
     m_start_ptr=m_read_buf+m_checked_idx;
@@ -269,105 +267,106 @@ HTTP_CODE http_conn::process_read()
 
 HTTP_CODE http_conn::do_request()
 {
-    if (strcmp(m_url, "/") == 0 )
-        m_url = "/judge.html";
-    
     strcpy(m_real_file, doc_root);
     int len = strlen(doc_root);
     
-    const char *p = strrchr(m_url, '/');
-    if (!p)
-        return BAD_REQUEST;
-    
-    if (!*++p)
-        return BAD_REQUEST;
-    
-    //处理cgi
-    if (cgi == 1 && (*p == '2' || *p  == '3') )
-    {
-        //根据标志判断是登录检测还是注册检测
-        snprintf(m_real_file + len, FILENAME_LEN - len, "/%s", p+1);
-
-        //将用户名和密码提取出来
-        //user=123&passwd=123
-        char name[100], password[100];
-        int i=0,j=5;
-        
-        while(i<100 && m_string[j]!='&'){
-            name[i] = m_string[j];
-            ++i,++j;
-        }
-        if (i==100)
+    if (strcmp(m_url, "/") == 0)
+        snprintf(m_real_file + len, FILENAME_LEN - len, "/judge.html");   
+    else{
+        const char *p = strrchr(m_url, '/');
+        if (!p)
             return BAD_REQUEST;
         
-        name[i]='\0';
-
-        j+=8;
-        i=0;
-
-        while(j < 100 && m_string[j]){
-            password[i]=m_string[j];
-            ++i,++j;
-        }
-        
-        if(j== 100)
+        if (!*++p)
             return BAD_REQUEST;
+        
+        //处理cgi
+        if (cgi == 1 && (*p == '2' || *p  == '3') ){//  /api/2login、/user/3register
+            //根据标志判断是登录检测还是注册检测
+            snprintf(m_real_file + len, FILENAME_LEN - len, "/%s", p+1);
+        
+            //将用户名和密码提取出来
+            //user=123&passwd=123
+            char name[100], password[100];
+            int i=0,j=5;
+            
+            while(i<100 && m_string[j]!='&'){
+                name[i] = m_string[j];
+                ++i,++j;
+            }
+            
+            if ( i==100 )
+                return BAD_REQUEST;
+            
+            name[i]='\0';
 
-        password[j]= '\0';
+            j+=8;
+            i=0;
 
-        if (*p == '3')
-        {
-            //如果是注册，先检测数据库中是否有重名的
-            //没有重名的，进行增加数据
-            char *sql_insert = (char *)malloc(sizeof(char) * 200);
-            strcpy(sql_insert, "INSERT INTO user(username, passwd) VALUES(");
-            strcat(sql_insert, "'");
-            strcat(sql_insert, name);
-            strcat(sql_insert, "', '");
-            strcat(sql_insert, password);
-            strcat(sql_insert, "')");
+            while(i < 100 && m_string[j]){
+                password[i]=m_string[j];
+                ++i,++j;
+            }
+            
+            if(i == 100)
+                return BAD_REQUEST;
 
-            if (m_users.find(name) == m_users.end())
+            password[i]= '\0';
+
+            if (*p == '3')
             {
-                MYSQL *mysql=nullptr;
-                connectionRAII mysqlcon(&mysql, &m_connPool);
+                //如果是注册，先检测数据库中是否有重名的
+                //没有重名的，进行增加数据
+                char *sql_insert = (char *)malloc(sizeof(char) * 200);
+                strcpy(sql_insert, "INSERT INTO user(username, passwd) VALUES(");
+                strcat(sql_insert, "'");
+                strcat(sql_insert, name);
+                strcat(sql_insert, "', '");
+                strcat(sql_insert, password);
+                strcat(sql_insert, "')");
+            
+                if (m_users.find(name) == m_users.end() )
+                {
+                    MYSQL *mysql=nullptr;
+                    connectionRAII mysqlcon(&mysql, &m_connPool);
+                    
+                    m_lock.lock();
+                    int res = mysql_query(mysql, sql_insert);
+                    m_users[name]=password;
+                    m_lock.unlock();
 
-                m_lock.lock();
-                int res = mysql_query(mysql, sql_insert);
-                m_users[name]=password;
-                m_lock.unlock();
-
-                if (!res)
-                    strcpy(m_url, "/log.html");
+                    if (!res)
+                        strcpy(m_url, "/log.html");
+                    else
+                        strcpy(m_url, "/registerError.html");
+                }
                 else
                     strcpy(m_url, "/registerError.html");
             }
-            else
-                strcpy(m_url, "/registerError.html");
+            //如果是登录，直接判断
+            //若浏览器端输入的用户名和密码在表中可以查找到，返回1，否则返回0
+            else if ( *p  == '2')
+            {
+                if (m_users.find(name) != m_users.end() && m_users[name] == password)
+                    strcpy(m_url, "/welcome.html");
+                else
+                    strcpy(m_url, "/logError.html");
+            }
         }
-        //如果是登录，直接判断
-        //若浏览器端输入的用户名和密码在表中可以查找到，返回1，否则返回0
-        else if ( *p  == '2')
-        {
-            if (m_users.find(name) != m_users.end() && m_users[name] == password)
-                strcpy(m_url, "/welcome.html");
-            else
-                strcpy(m_url, "/logError.html");
-        }
+        
+        if (*p == '0')
+            snprintf(m_real_file + len, FILENAME_LEN - len, "/register.html");
+        else if (*p  == '1')
+            snprintf(m_real_file + len, FILENAME_LEN - len, "/log.html");
+        else if (*p == '5')
+            snprintf(m_real_file + len, FILENAME_LEN - len, "/picture.html");
+        else if (*p  == '6')
+            snprintf(m_real_file + len, FILENAME_LEN - len, "/video.html");
+        else if (*p == '7')
+            snprintf(m_real_file + len, FILENAME_LEN - len, "/fans.html");    
+        else 
+            snprintf(m_real_file + len, FILENAME_LEN - len, m_url);
     }
-    
-    if (*p == '0')
-        strncpy(m_real_file + len, "/register.html", strlen("/register.html"));
-    else if (*p  == '1')
-        strncpy(m_real_file + len, "/log.html", strlen("/log.html"));
-    else if (*p == '5')
-        strncpy(m_real_file + len, "/picture.html", strlen("/picture.html"));
-    else if (*p  == '6')
-        strncpy(m_real_file + len, "/video.html", strlen("/video.html"));
-    else if (*p == '7')
-        strncpy(m_real_file + len, "/fans.html" , strlen("/fans.html"));
-    else
-        strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1);
 
     if (stat(m_real_file, &m_file_stat) < 0)
         return NO_RESOURCE;

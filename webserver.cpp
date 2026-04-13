@@ -54,12 +54,6 @@ void WebServer::eventListen()
     
     ret = listen(m_listenfd, 5);
     assert(ret >= 0);
-    
-    //epoll对象创建内核事件表，并注册监听文件描述符
-    epoll.addfd(m_listenfd,Epoll::Type::LISTEN);
-    epoll.addfd(utils.getPipefd0(), Epoll::Type::PIPE);
-
-    Epoll::setnonblocking(utils.getPipefd1());
 }
 
 bool WebServer::dealclientdata()
@@ -94,7 +88,7 @@ bool WebServer::dealclientdata()
         {
             int connfd = accept(m_listenfd, (struct sockaddr *)&client_address, &client_addrlength);
             if (connfd < 0)
-                return true;
+                break;
             if ( connfd > MAX_FD)
             {
                 const char *info = "Internal server busy";
@@ -112,11 +106,12 @@ bool WebServer::dealclientdata()
     return true;
 }
 
-    //reactor
- //   utils.adjust_timer(sockfd);
-
 void WebServer::eventLoop()
 {
+        //epoll对象创建内核事件表，并注册监听文件描述符
+    epoll.addfd(m_listenfd,Epoll::Type::LISTEN);
+    epoll.addfd(utils.getPipefd0(), Epoll::Type::PIPE);
+
     bool timeout = false;
     bool stop_server = false;
 
@@ -132,36 +127,31 @@ void WebServer::eventLoop()
             continue;
         }
 
-        for (int i = 0,fd; i < number; i++)
-            //处理新到的客户连接
-            if (epoll.isListenEvent(i,m_listenfd) )
-                dealclientdata();
-            else if ( fd = epoll.isErrorEvent(i) )
-            {
-                if(fd==utils.getPipefd0() || fd == m_listenfd)
-                {
-                    LOG_ERROR("%s", "epoll failure");
-                    continue;
-                }
-                epoll.removefd(fd);
-                utils.del_timer(fd);
-                http.close_conn(fd);
-                close(fd);
-            }
-            //处理信号
-            else if (  epoll.isSignal(i, utils.getPipefd0()) )
-            {
-                bool flag = utils.dealwithsignal(timeout,stop_server);
-                if (false == flag)
-                    LOG_ERROR("%s", "dealclientdata failure");
-            }
-            else if(fd = epoll.isConnectionEvent(i) ){
-                if (fd > 0)//若监测到读事件，将该事件放入请求队列
-                    m_pool->append(fd, false);
+        for (int i = 0; i < number ; i++){
+            const epoll_event&event=epoll.getEvent(i);
+
+            if (event.data.fd == m_listenfd){
+                if (event.events & EPOLLIN)
+                    dealclientdata();
                 else
-                    m_pool->append(-fd, true);
-                    //处理客户连接上接收到的数据
+                    LOG_ERROR("%s", "epoll failure");
+            }else if ( event.data.fd == utils.getPipefd0() ){
+                if(event.events & EPOLLIN ){
+                    if(false == utils.dealwithsignal(timeout,stop_server) )
+                        LOG_ERROR("%s", "dealclientdata failure");
+                }else
+                    LOG_ERROR("%s", "epoll failure");
+            }else if(event.events & EPOLLIN)
+                m_pool->append(event.data.fd, false);
+            else if(event.events && EPOLLOUT)
+                m_pool->append(event.data.fd, true);
+            else{    
+                epoll.removefd(event.data.fd);
+                utils.del_timer(event.data.fd);
+                http.close_conn(event.data.fd);
+                close(event.data.fd);
             }
+        }
         
         if (timeout)
         {
