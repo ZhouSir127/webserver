@@ -7,83 +7,85 @@
 
 bool sort_timer_lst::add_timer(int sock)
 {
-    if(sock>MAX_FD||users_timer[sock])
+    if(sock>MAX_FD||users_timer[sock] )
         return false;
     
-    util_timer *timer = new util_timer(time(nullptr)+LIFE_SPAN,sock);
+    std::shared_ptr<util_timer> timer = std::make_shared<util_timer> (time(nullptr)+LIFE_SPAN,sock);
 
-    util_timer*prev=tail->prev;
-
-    tail->prev=timer;
     timer->next=tail;
+    timer->prev=tail->prev;
 
-    prev->next=timer; 
-    timer->prev=prev;
+    std::shared_ptr<util_timer> next = timer -> next.lock();
+    std::shared_ptr<util_timer> prev = timer -> prev.lock();
 
+    next->prev=timer;
+    prev->next=timer;
+        
     users_timer[sock]=timer;
     return true;
 }
 
-bool sort_timer_lst::adjust_timer(int sockfd)
-{
-    if(sockfd>MAX_FD||users_timer[sockfd]==nullptr)
+bool sort_timer_lst::adjust_timer(int sockfd){
+    if(sockfd>MAX_FD||users_timer[sockfd]==nullptr )
         return false;
     
-    util_timer *timer = users_timer[sockfd];
+    std::shared_ptr<util_timer>&timer = users_timer[sockfd];
+    timer->expire=time(nullptr)+LIFE_SPAN;
+
+    if( timer != tail->prev.lock() ){    
     
-    if( timer!=tail->prev ){
-        util_timer *prev=timer->prev,*next=timer->next;
-        
+        std::shared_ptr<util_timer> next = timer -> next.lock();
+        std::shared_ptr<util_timer> prev = timer -> prev.lock();
+
         next->prev=prev;
         prev->next=next;
-
-        prev=tail->prev;
-
-        prev->next=timer; 
-        timer->prev=prev;
-
-        tail->prev=timer;
+        
         timer->next=tail;
+        timer->prev=tail->prev;
+        
+        std::shared_ptr<util_timer> Next = timer -> next.lock();
+        std::shared_ptr<util_timer> Prev = timer -> prev.lock();
+
+        Next->prev=timer;
+        Prev->next=timer;
     }
     
-    timer->expire=time(nullptr)+LIFE_SPAN;
     return true;
 }
 
 bool sort_timer_lst::del_timer(int sockfd)
 {
-    if(sockfd>MAX_FD||users_timer[sockfd]==nullptr)
+    if(sockfd>MAX_FD||users_timer[sockfd]==nullptr )
         return false;
     
-    util_timer *prev=users_timer[sockfd]->prev,*next=users_timer[sockfd]->next;
+    std::shared_ptr<util_timer> &timer = users_timer[sockfd];
+
+    std::shared_ptr<util_timer> next = timer -> next.lock();
+    std::shared_ptr<util_timer> prev = timer -> prev.lock();
 
     prev->next=next;
     next->prev=prev;
     
-    delete users_timer[sockfd];
-    users_timer[sockfd]=nullptr;
+    timer.reset();
 
     return true;
 }
 
 void sort_timer_lst::tick()
 {
-    util_timer *end =head->next;
+    std::shared_ptr<util_timer> end = head -> next.lock();
     time_t now=time(nullptr);
-    //(head,end)
-    while(end!=tail&&end->expire<=now)
-        end=end->next;
-
+    
     death.clear();
-    
-    for ( util_timer *tmp=head->next,*next=tmp->next; tmp!=end; tmp=next,next=tmp->next ){
-        death.push_back(tmp->sockfd);
-        users_timer[tmp->sockfd]=nullptr;
-        delete tmp;
+
+    while( end!=tail && end->expire <= now){
+        death.push_back(end->sockfd);
+        users_timer[end->sockfd].reset();
+        end=end->next.lock();
     }
-    
-    end->prev=head;
-    head->next=end;
+
+    end->prev = head;
+    head->next = end;
 }
 
 int Signal::m_pipefd[2];

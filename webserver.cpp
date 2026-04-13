@@ -114,9 +114,8 @@ void WebServer::eventLoop()
 
     bool timeout = false;
     bool stop_server = false;
-
-    do
-    {
+    
+    do{
         int number = epoll.wait();
         if (number < 0 ){
             if(errno != EINTR)
@@ -153,8 +152,7 @@ void WebServer::eventLoop()
             }
         }
         
-        if (timeout)
-        {
+        if (timeout){
             utils.timer_handler();
             
             for(int fd : utils.getDeath() ){

@@ -26,55 +26,47 @@
 #include "../consts.h"
 
 #include <vector>
+#include <memory>
 
 class sort_timer_lst
 {
 private:
 
     struct util_timer{    
-        util_timer():prev(NULL), next(NULL){}
+        util_timer()=default;
         
-        util_timer(time_t time,int sock):expire(time),sockfd(sock), prev(NULL), next(NULL){}
+        util_timer(time_t time,int sock):expire(time),sockfd(sock){}
         
         time_t expire;
         int sockfd;
         
-        util_timer *prev;
-        util_timer *next;
+        std::weak_ptr<util_timer>prev;
+        std::weak_ptr<util_timer>next;
     };
 
-    util_timer *head;
-    util_timer *tail;
-    util_timer**users_timer;    
+    std::shared_ptr<util_timer> head;
+    std::shared_ptr<util_timer> tail;
+    std::vector<std::shared_ptr<util_timer> > users_timer;    
 
     std::vector<int> death;
 
 public:
-    sort_timer_lst():head(new util_timer),tail(new util_timer),users_timer(new util_timer*[MAX_FD+1]){
+    sort_timer_lst():head(std::make_shared<util_timer>()),tail(std::make_shared<util_timer>()),users_timer(MAX_FD+1){
         head->next=tail;
         tail->prev=head;
-    
-        for (int i = 0; i <= MAX_FD; ++i)
-            users_timer[i] = nullptr;
     }
     
-    ~sort_timer_lst(){
-        do{
-            util_timer *tmp = head;
-            head = head->next;
-            
-            delete tmp;
-        }while(head);
-    
-        delete[] users_timer;
-    }
-
     bool add_timer(int sock);
     bool adjust_timer(int sockfd);
     bool del_timer(int sockfd);
     void tick();
     const std::vector<int>& getDeath() const { return death; }
-    bool exist(int fd)const {return users_timer[fd];}
+    
+    bool exist(int fd)const {        
+        if(fd>MAX_FD)
+            return false;
+        return users_timer[fd]!=nullptr;
+    }
 };
 
 

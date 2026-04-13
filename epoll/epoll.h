@@ -4,6 +4,14 @@
 
 class Epoll{
 
+private:
+    epoll_event events[MAX_EVENT_NUMBER];
+    int epollfd;
+    bool listenET;//true:ET ,false:LT
+    bool connectET;    
+
+    int setnonblocking(int fd);
+
 public:
     enum class Type :unsigned char{
         LISTEN,
@@ -12,8 +20,7 @@ public:
     };
     
     //对文件描述符设置非阻塞
-    static int setnonblocking(int fd);
-
+    
     Epoll(bool listenET,bool connectET):listenET(listenET),connectET(connectET),epollfd(epoll_create(5)){
         assert(epollfd != -1);
     }
@@ -32,9 +39,4 @@ public:
         return events[idx];
     }
 
-private:
-    epoll_event events[MAX_EVENT_NUMBER];
-    int epollfd;
-    bool listenET;//true:ET ,false:LT
-    bool connectET;    
 };
