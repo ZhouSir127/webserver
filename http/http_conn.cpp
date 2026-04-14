@@ -328,7 +328,7 @@ HTTP_CODE http_conn::do_request()
                 if (m_users.find(name) == m_users.end() )
                 {
                     MYSQL *mysql=nullptr;
-                    connectionRAII mysqlcon(&mysql, &m_connPool);
+                    connectionRAII mysqlcon(mysql, &m_connPool);
                     
                     m_lock.lock();
                     int res = mysql_query(mysql, sql_insert);

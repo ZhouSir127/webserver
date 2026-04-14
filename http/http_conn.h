@@ -22,6 +22,8 @@
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include <filesystem>
+
 
 #include "../lock/locker.h"
 #include "../CGImysql/sql_connection_pool.h"
@@ -63,7 +65,7 @@ enum HTTP_CODE
 class http_conn
 {
 public:
-    http_conn(bool connectET,int sockfd, char*root,connection_pool&m_connPool,std::unordered_map<std::string,std::string>&m_users)
+    http_conn(bool connectET,int sockfd, string& root,connection_pool&m_connPool,std::unordered_map<std::string,std::string>&m_users)
     :connectET(connectET),m_sockfd(sockfd),doc_root(root),m_connPool(m_connPool),m_users(m_users),m_read_buf(nullptr)
     {
     init();
@@ -98,10 +100,12 @@ private:
     bool add_blank_line();
 
 private:
-    locker m_lock;
+    std::mutex m_lock;
     bool m_linger;
-    connection_pool&m_connPool;
-    std::unordered_map<std::string,std::string>&m_users;
+    
+    std::string& doc_root;
+    connection_pool& m_connPool;
+    std::unordered_map<std::string,std::string>& m_users;
 
     int m_sockfd;
     
@@ -128,7 +132,7 @@ private:
     char *m_string; //存储请求头数据
     int bytes_to_send;
     int bytes_have_send;
-    char *doc_root;
+    
 
     bool connectET;
 };
@@ -139,30 +143,23 @@ private:
 
 bool connectET;
 
-std::unique_ptr<std::unique_ptr<http_conn>[]> users;
-std::unique_ptr<char[]>m_root;
+std::vector<std::unique_ptr<http_conn> > users;
+std::string m_root;
 
 connection_pool connPool;
 std::unordered_map<std::string, std::string> m_users;
 
 public:
-    HTTP(bool connectET,char* User, char* passWord, char* databaseName, int sql_num)
-    :connectET(connectET),users(std::make_unique< std::unique_ptr<http_conn>[] >(1+MAX_FD) ),connPool("localhost",sql_num,User,passWord,databaseName,3306)
+    HTTP(bool connectET,const string& User, const string& passWord, const string& databaseName, int sql_num)
+    :connectET(connectET),
+    users(1+MAX_FD),
+    m_root(std::filesystem::current_path().string()+"/root"),
+    connPool("localhost",3306,User,passWord,databaseName,sql_num)
     { 
-        char server_path[200];
-        getcwd(server_path, 200);
-        
-        char root[6] = "/root";
-
-        m_root = std::make_unique<char[]>(strlen(server_path) + strlen(root) + 1);
-
-        strcpy(m_root.get(), server_path);
-        strcat(m_root.get(), root);
-    
         //先从连接池中取一个连接
         MYSQL *mysql = nullptr;
-        connectionRAII mysqlcon(&mysql,&connPool);
-
+        connectionRAII mysqlcon(mysql,&connPool);
+    
         //在user表中检索username，passwd数据，浏览器端输入
         if (mysql_query(mysql, "SELECT username,passwd FROM user"))
             LOG_ERROR("SELECT error:%s\n", mysql_error(mysql));
@@ -182,7 +179,7 @@ public:
     bool add_http(int sock){
         if(sock>MAX_FD||users[sock])
             return false;
-        users[sock]=make_unique<http_conn>(connectET,sock,m_root.get(),connPool,m_users);
+        users[sock]=make_unique<http_conn>(connectET,sock,m_root,connPool,m_users);
         return true;
     }    
     //关闭连接，关闭一个连接，客户总量减一

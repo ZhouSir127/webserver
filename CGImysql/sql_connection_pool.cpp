@@ -9,10 +9,11 @@
 #include <pthread.h>
 #include <iostream>
 
-connection_pool::connection_pool(char* url, int Port,char* User, char* PassWord, char* DBName, int MaxConn)
-:m_MaxConn(MaxConn),reserve(sem(m_MaxConn) )
+connection_pool::connection_pool(const std::string& url, int Port,const std::string& User, const std::string& PassWord, const std::string& DBName, int MaxConn)
 {
-	for (int i = 0; i < m_MaxConn; i++)
+	sem_init(&reserve, 0, MaxConn);
+
+	for (int i = 0; i < MaxConn; i++)
 	{
 		MYSQL *con = mysql_init(nullptr);
 
@@ -21,35 +22,28 @@ connection_pool::connection_pool(char* url, int Port,char* User, char* PassWord,
 		//	LOG_ERROR("MySQL Error");
 			exit(1);
 		}
-		con = mysql_real_connect(con, url, User, PassWord, DBName, Port, nullptr , 0);
+
+		con = mysql_real_connect(con, url.c_str(), User.c_str(), PassWord.c_str(), DBName.c_str(), Port, nullptr , 0);
 
 		if (con == NULL)
 		{
 		//	LOG_ERROR("MySQL Error");
 			exit(1);
 		}
-		
 		connList.push_back(con);
 	}
-
 }
 
 //当有请求时，从数据库连接池中返回一个可用连接，更新使用和空闲连接数
 MYSQL *connection_pool::GetConnection()
 {
-	MYSQL *con = nullptr;
-
-	if (!connList.size() )
-		return nullptr;
-
-	reserve.wait();
+	sem_wait(&reserve);
 	
-	lock.lock();
+	unique_lock<std::mutex>Lock(lock);
 
-	con = connList.front();
+	MYSQL *con = connList.front();
 	connList.pop_front();
 
-	lock.unlock();
 	return con;
 }
 
@@ -59,13 +53,10 @@ bool connection_pool::ReleaseConnection(MYSQL *con)
 	if (!con)
 		return false;
 
-	lock.lock();
-
+	unique_lock<std::mutex>Lock(lock);
 	connList.push_back(con);
 
-	lock.unlock();
-
-	reserve.post();
+	sem_post(&reserve);
 	return true;
 }
 
@@ -77,19 +68,18 @@ int connection_pool::GetFreeConn()
 
 connection_pool::~connection_pool()
 {
-	lock.lock();
-	
-	if (connList.size() > 0)
-		for (deque <MYSQL *>::iterator it = connList.begin(); it != connList.end(); ++it)
-			mysql_close(*it);
-	
-	lock.unlock();
+	sem_destroy(&reserve);
+
+	unique_lock<std::mutex>Lock(lock);
+
+	for (std::deque <MYSQL *>::iterator it = connList.begin(); it != connList.end(); ++it)
+		mysql_close(*it);
 }
 
-connectionRAII::connectionRAII(MYSQL **SQL, connection_pool *connPoolptr){
-	*SQL = connPoolptr->GetConnection();
+connectionRAII::connectionRAII(MYSQL * &con, connection_pool *connPoolptr){
+	con = connPoolptr->GetConnection();
 	
-	conRAII = *SQL;
+	conRAII = con;
 	poolRAII = connPoolptr;
 }
 
