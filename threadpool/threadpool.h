@@ -2,13 +2,11 @@
 #define THREADPOOL_H
 
 #include <queue>
-#include <cstdio>
-#include <exception>
+//#include <exception>
 #include <pthread.h>
 #include <vector>
-//#include "../lock/locker.h"
 #include <mutex>
-#include <condition_variable>
+#include <semaphore.h>
 
 #include "../CGImysql/sql_connection_pool.h"
 #include "../http/http_conn.h"
@@ -29,8 +27,15 @@ public:
             if (pthread_detach(m_threads[i]) )
                 throw std::exception();
         }
+
+        if (sem_init(&m_sem, 0, 0) != 0)
+            throw std::exception();
     }
     
+    ~threadpool(){
+        sem_destroy(&m_sem);
+    }
+
     bool append(int fd, bool EPOLLOUT);
 
 private:
@@ -46,9 +51,7 @@ private:
     std::vector<pthread_t> m_threads;       //描述线程池的数组，其大小为m_thread_number
     std::queue<std::pair<int,bool> > m_workqueue; //请求队列
     std::mutex m_queuelocker;       //保护请求队列的互斥锁
-    std::condition_variable m_queuestat;            //是否有任务需要处理
+    sem_t m_sem;             //是否有任务需要处理
 };
-
-
 
 #endif

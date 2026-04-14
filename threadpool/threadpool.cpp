@@ -10,8 +10,7 @@ bool threadpool::append(int fd, bool EPOLLOUT)
     
     m_workqueue.push({fd,EPOLLOUT} );
         
-    m_queuestat.post();
-    return true;
+    return sem_post(&m_sem)==0;
 }
 
 void *threadpool::worker(void *arg)
@@ -25,17 +24,20 @@ void threadpool::run()
 {
     while (true)
     {
-        m_queuestat.wait();
+        sem_wait(&m_sem);
+        int fd;
+        bool EPOLLOUT;
+
+        {
+        unique_lock<std::mutex> lock(m_queuelocker);
     
-        m_queuelocker.lock();
-    
-        int fd=m_workqueue.front().first;
-        bool EPOLLOUT = m_workqueue.front().second;
+        fd=m_workqueue.front().first;
+        EPOLLOUT = m_workqueue.front().second;
         
         m_workqueue.pop();
-        
-        m_queuelocker.unlock();
-        
+        }
+
+
         if ( !EPOLLOUT )
             switch(http.process(fd) ){
                 case BAD_REQUEST:
