@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <memory>
 #include <cstdlib>
+#include <string>
+#include "../consts.h"
 
 //定义http响应的一些状态信息
 const char *ok_200_title = "OK";
@@ -25,25 +27,22 @@ bool http_conn::init()
     m_check_state = CHECK_STATE_REQUESTLINE;
     m_linger = false;
     m_method = GET;
-    m_url = 0;
-    //m_version = 0;
+    
     m_content_length = 0;
     m_host = 0;
-    m_start_ptr = m_read_buf;
+    
+    m_start_idx = 0;
     m_checked_idx = 0;
     m_read_idx = 0;
-    capacity=1024;
     m_write_idx = 0;
+    
     cgi = 0;
 
-    char* new_buf = (char*)realloc(m_read_buf, capacity);
-    if (!new_buf)
-        return false;
+    m_url.clear();
 
-    m_read_buf = new_buf;
-
-    memset(m_write_buf, '\0', WRITE_BUFFER_SIZE);
-    memset(m_real_file, '\0', FILENAME_LEN);
+    m_read_buf.resize(1024,0);
+    m_write_buf.resize(1024,0);
+    m_real_file.resize(1024,0);
 }
 
 //从状态机，用于分析出一行内容
@@ -55,68 +54,45 @@ HTTP_CODE http_conn::parse_line()
         {
             if ( m_checked_idx + 1 == m_read_idx )
                 return NO_REQUEST;
-            else if ( m_read_buf[m_checked_idx+1] == '\n')
-            {
+            else if ( m_read_buf[m_checked_idx+1] == '\n'){
                 m_read_buf[m_checked_idx++] = '\0';
                 m_read_buf[m_checked_idx++] = '\0';
                 return GET_REQUEST;
             }
-            return BAD_REQUEST;
+            return BAD_REQUEST;//'\r后非'\n'
         }
         ++m_checked_idx;
     }
     
-    return NO_REQUEST;
+    return NO_REQUEST;//没读到'/r'
 }
 
 //循环读取客户数据，直到无数据可读或对方关闭连接
 //非阻塞ET工作模式下，需要一次性将数据读完
 bool http_conn::read_once()
 {
-    int bytes_read = 0;
-    
     //LT读取数据
-    if (!connectET){        
-        if(m_read_idx == capacity ){
-            if(capacity==READ_BUFFER_SIZE)
-                return false;
+    if (!connectET){
+        if(m_read_buf.size()==m_read_idx)
+            m_read_buf.resize( min( (m_read_buf.size()<<1),(size_t)READ_BUFFER_SIZE) );
         
-            capacity=min(capacity<<1 ,READ_BUFFER_SIZE);
-            
-            char* new_buf = (char*)realloc(m_read_buf, capacity);
-            if (!new_buf) 
-                return false;
-            
-            m_read_buf = new_buf;
-        };
-    
-        bytes_read = recv(m_sockfd, m_read_buf+m_read_idx , capacity-m_read_idx,0);
+        int bytes_read = recv(m_sockfd, &m_read_buf[m_read_idx] ,m_read_buf.size()-m_read_idx,0);
     
         if (bytes_read < 0 ){
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            if (errno == EAGAIN || errno == EWOULDBLOCK)//无数据可读
                 return true;
             return false;
-        }
-        else if (bytes_read == 0)
+        }else if (bytes_read == 0)//对方正常关闭了连接
             return false;
         
         m_read_idx += bytes_read;
     }else
         while (true)
-        {
-            if(m_read_idx == capacity ){
-                if(capacity==READ_BUFFER_SIZE)
-                    return false;
-            
-                capacity=min(capacity<<1 ,READ_BUFFER_SIZE);
-                char* new_buf = (char*)realloc(m_read_buf, capacity);
-                if (!new_buf) 
-                    return false;
-                
-                m_read_buf = new_buf;
-            }
-    
-            bytes_read = recv(m_sockfd, m_read_buf+m_read_idx, capacity-m_read_idx , 0);
+        {    
+            if(m_read_buf.size()==m_read_idx)
+                m_read_buf.resize(m_read_buf.size()<<1 );
+
+            int bytes_read = recv(m_sockfd, &m_read_buf[m_read_idx], m_read_buf.size()-m_read_idx , 0);
             if (bytes_read < 0 )
             {
                 if (errno == EAGAIN || errno == EWOULDBLOCK)
@@ -127,7 +103,6 @@ bool http_conn::read_once()
                 return false;
             
             m_read_idx += bytes_read;
-        
         }
     return true;
 }
@@ -135,53 +110,61 @@ bool http_conn::read_once()
 //解析http请求行，获得请求方法，目标url及http版本号
 HTTP_CODE http_conn::parse_request_line()
 {
-    char *method = m_start_ptr;
+    int method = m_start_idx;
     
-    m_start_ptr=strpbrk(m_start_ptr, " \t");
-    if (!m_start_ptr)
+    m_start_idx = m_read_buf.find_first_of(" \t", m_start_idx );
+    if (m_start_idx == std::string::npos)
         return BAD_REQUEST;
-    *m_start_ptr++ = '\0';
-    m_start_ptr += strspn(m_start_ptr, " \t");
+    
+    m_read_buf[m_start_idx++] = '\0';
+    
+    m_start_idx = m_read_buf.find_first_not_of(" \t",m_start_idx);
+    if (m_start_idx == std::string::npos)
+        return BAD_REQUEST;
 
-    if (strcasecmp(method, "GET") == 0)
+    if ( m_read_buf.compare(method,3,"GET") == 0 )
         m_method = GET;
-    else if (strcasecmp(method, "POST") == 0){
+    else if (  m_read_buf.compare(method,4,"POST") == 0 ){
         m_method = POST;
         cgi = 1;
     }else
         return BAD_REQUEST;
     
+    int url = m_start_idx ;
 
-    m_url = m_start_ptr;
-
-    m_start_ptr=strpbrk(m_start_ptr, " \t");
-    if (!m_start_ptr)
+    m_start_idx = m_read_buf.find_first_of(" \t", m_start_idx );
+    if (m_start_idx == std::string::npos)
         return BAD_REQUEST;
-    *m_start_ptr++ = '\0';
-    m_start_ptr += strspn(m_start_ptr, " \t");
-
-    if (strncasecmp(m_url, "http://", 7) == 0)
-    {
-        m_url += 7;
-        m_url = strchr(m_start_ptr, '/');
     
-        if (!m_url)
+    int end = m_start_idx;
+    m_read_buf[m_start_idx++] = '\0';
+    
+    m_start_idx = m_read_buf.find_first_not_of(" \t",m_start_idx);
+    if (m_start_idx == std::string::npos)
+        return BAD_REQUEST;
+
+    if ( m_read_buf.compare(url, 7 ,"http://") == 0)
+    {
+        url += 7;
+        url = m_read_buf.find_first_of('/',url);
+
+        if (url == std::string::npos )
             return BAD_REQUEST;
-    }else if (strncasecmp(m_url, "https://", 8) == 0){
-        m_url += 8;
-        m_url = strchr(m_url, '/');
+    }else if (m_read_buf.compare(url, 8 ,"https://") == 0){
+        url += 8;
+        url = m_read_buf.find_first_of('/',url);
         
-        if (!m_url)
+        if ( url == std::string::npos )
             return BAD_REQUEST;
     }else if(m_url[0] != '/')
         return BAD_REQUEST;
 
-    char *m_version = m_start_ptr;
+    m_url = std::string(m_read_buf.begin()+url,m_read_buf.begin()+end);
 
-    m_start_ptr=m_read_buf+m_checked_idx;
-
-    if (strcasecmp(m_version, "HTTP/1.1") != 0)
+    if (m_read_buf.compare(m_start_idx, 8 ,"HTTP/1.1") != 0)
         return BAD_REQUEST;    
+
+    m_start_idx=m_checked_idx;
 
     m_check_state = CHECK_STATE_HEADER;
     return NO_REQUEST;
@@ -192,7 +175,7 @@ HTTP_CODE http_conn::parse_headers()
 {
     if (*m_start_ptr == '\0')//请求头最后的空行
     {
-        m_start_ptr=m_read_buf +m_checked_idx;
+        m_start_ptr=m_read_buf + m_checked_idx;
 
         if (m_content_length >0 ){
             m_check_state = CHECK_STATE_CONTENT;
@@ -226,19 +209,18 @@ HTTP_CODE http_conn::parse_headers()
 
 HTTP_CODE http_conn::process_read()
 {
-    if (read_once() == false )
+    if (read_once() == false )//对方关闭了连接或读故障
         return BAD_REQUEST;
     while(true)
         if(m_check_state == CHECK_STATE_CONTENT){
             if (m_read_idx - m_checked_idx >= m_content_length )
             {
-                m_checked_idx = m_start_ptr-m_read_buf + m_content_length;
                 //m_read_buf[m_checked,m_read_idx)已经读到的但尚未check
                 //text[0:content_length)为请求体内容
-                m_read_buf[m_checked_idx] = '\0';
+                m_read_buf[m_checked_idx = m_start_idx + m_content_length ] = '\0';
                 //POST请求中最后为输入的用户名和密码
-                m_string = m_start_ptr;
-                m_start_ptr=m_read_buf +m_checked_idx;
+                m_string = std::string(m_read_buf.begin() + m_start_idx ,m_read_buf.begin() + m_checked_idx);
+                m_start_idx = m_checked_idx;
                 
                 return do_request();
             }
@@ -252,12 +234,12 @@ HTTP_CODE http_conn::process_read()
                 HTTP_CODE ret = parse_request_line();
                 
                 if (ret == BAD_REQUEST)
-                    break;
+                    return BAD_REQUEST;
             }else{
                 HTTP_CODE ret = parse_headers();
                     
                 if (ret == BAD_REQUEST)
-                    break;
+                    return BAD_REQUEST;
                 else if (ret == GET_REQUEST)
                     return do_request();
             }

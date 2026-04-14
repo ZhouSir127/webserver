@@ -23,7 +23,7 @@
 #include <vector>
 #include <memory>
 #include <filesystem>
-
+#include <string>
 
 #include "../lock/locker.h"
 #include "../CGImysql/sql_connection_pool.h"
@@ -52,7 +52,7 @@ enum CHECK_STATE
 };
 enum HTTP_CODE
 {
-    NO_REQUEST,
+    NO_REQUEST= 0 ,
     GET_REQUEST,
     BAD_REQUEST,
     NO_RESOURCE,
@@ -109,19 +109,18 @@ private:
 
     int m_sockfd;
     
-    char* m_read_buf;
+    std::string m_read_buf;
     int m_read_idx;
     int m_checked_idx;
-    char* m_start_ptr;
-    int capacity;
+    int m_start_idx;
 
-    char m_write_buf[WRITE_BUFFER_SIZE];
+    std::string m_write_buf;
     int m_write_idx;
     
     CHECK_STATE m_check_state;
     METHOD m_method;
-    char m_real_file[FILENAME_LEN];
-    char *m_url;
+    std::string m_real_file;
+    std::string m_url;
     char *m_host;
     long m_content_length;
     char *m_file_address;
@@ -129,11 +128,10 @@ private:
     struct iovec m_iv[2];
     int m_iv_count;
     int cgi;        //是否启用的POST
-    char *m_string; //存储请求头数据
+    std::string m_string; //存储请求体数据
     int bytes_to_send;
     int bytes_have_send;
     
-
     bool connectET;
 };
 
