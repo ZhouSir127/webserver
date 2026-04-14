@@ -35,7 +35,7 @@ private:
     struct util_timer{    
         util_timer()=default;
         
-        util_timer(time_t time,int sock):expire(time),sockfd(sock){}
+        util_timer(int sock):expire( time(nullptr)+LIFE_SPAN ),sockfd(sock){}
         
         time_t expire;
         int sockfd;
@@ -120,19 +120,18 @@ class Utils{
 
 public:
         //定时处理任务，重新定时以不断触发SIGALRM信号
-    void timer_handler();
-    
+    void timer_handler();    
     int getPipefd1() const { return Signal::getInstance().getPipefd1(); }
     int getPipefd0() const { return Signal::getInstance().getPipefd0(); }
     bool add_timer(int sock) { return m_timer_lst.add_timer(sock); }
     bool adjust_timer(int sockfd) { return m_timer_lst.adjust_timer(sockfd); }
     bool del_timer(int sockfd) { return m_timer_lst.del_timer(sockfd); }
-    void tick() { m_timer_lst.tick(); }
     bool dealwithsignal(bool &timeout, bool &stop_server) { return Signal::getInstance().dealwithsignal(timeout, stop_server); }
     const std::vector<int>& getDeath() const { return m_timer_lst.getDeath(); }
 
 private:
     sort_timer_lst m_timer_lst;
+    
 };
 
 

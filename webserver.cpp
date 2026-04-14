@@ -10,7 +10,7 @@ WebServer::WebServer(int port,
 listenET(listenET),connectET(connectET),
 epoll(listenET,connectET),
 http(connectET,user, passWord, databaseName,sql_num),
-m_pool ( new threadpool(epoll,utils,http,thread_num) ),
+m_pool (epoll,utils,http,thread_num),
 m_log_write(log_write),m_close_log(close_log)
 {
      if (0 == m_close_log)
@@ -26,7 +26,6 @@ m_log_write(log_write),m_close_log(close_log)
 WebServer::~WebServer()
 {
     close(m_listenfd);
-    delete m_pool;
 }
 
 void WebServer::eventListen()
@@ -141,9 +140,9 @@ void WebServer::eventLoop()
                 }else
                     LOG_ERROR("%s", "epoll failure");
             }else if(event.events & EPOLLIN)
-                m_pool->append(event.data.fd, false);
+                m_pool.append(event.data.fd, false);
             else if(event.events && EPOLLOUT)
-                m_pool->append(event.data.fd, true);
+                m_pool.append(event.data.fd, true);
             else{    
                 epoll.removefd(event.data.fd);
                 utils.del_timer(event.data.fd);

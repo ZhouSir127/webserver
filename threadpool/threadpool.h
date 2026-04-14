@@ -5,7 +5,11 @@
 #include <cstdio>
 #include <exception>
 #include <pthread.h>
-#include "../lock/locker.h"
+#include <vector>
+//#include "../lock/locker.h"
+#include <mutex>
+#include <condition_variable>
+
 #include "../CGImysql/sql_connection_pool.h"
 #include "../http/http_conn.h"
 #include "../timer/lst_timer.h"
@@ -15,31 +19,16 @@
 class threadpool
 {
 public:
-    threadpool(Epoll&epoll,Utils&utils,HTTP&http,int thread_number = 8) 
-    :epoll(epoll),utils(utils),http(http),m_thread_number(thread_number), m_threads(NULL){
-        if (thread_number <= 0 || max_request <= 0)
-            throw std::exception();
-        m_threads = new pthread_t[m_thread_number];
-        if (!m_threads)
-            throw std::exception();
-        
+    threadpool(Epoll&epoll,Utils&utils,HTTP&http,int thread_number) 
+    :epoll(epoll),utils(utils),http(http),m_thread_number(thread_number), m_threads(m_thread_number){
         for (int i = 0; i < thread_number; ++i)
         {
-            if (pthread_create(m_threads + i, nullptr , worker, this) != 0)
-            {
-                delete[] m_threads;
+            if (pthread_create(&m_threads[i], nullptr , worker, this) != 0)
                 throw std::exception();
-            }
-            if (pthread_detach(m_threads[i]))
-            {
-                delete[] m_threads;
+            
+            if (pthread_detach(m_threads[i]) )
                 throw std::exception();
-            }
         }
-    }
-    
-    ~threadpool(){
-        delete[] m_threads;
     }
     
     bool append(int fd, bool EPOLLOUT);
@@ -54,11 +43,10 @@ private:
     HTTP&http;
 
     int m_thread_number;        //线程池中的线程数
-    int m_max_requests;         //请求队列中允许的最大请求数
-    pthread_t *m_threads;       //描述线程池的数组，其大小为m_thread_number
-    std::queue<pair<int,bool> > m_workqueue; //请求队列
-    locker m_queuelocker;       //保护请求队列的互斥锁
-    sem m_queuestat;            //是否有任务需要处理
+    std::vector<pthread_t> m_threads;       //描述线程池的数组，其大小为m_thread_number
+    std::queue<std::pair<int,bool> > m_workqueue; //请求队列
+    std::mutex m_queuelocker;       //保护请求队列的互斥锁
+    std::condition_variable m_queuestat;            //是否有任务需要处理
 };
 
 

@@ -30,7 +30,7 @@ public:
     }
     
     //将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
-    int  addfd(int fd,Type type);
+    int addfd(int fd,Type type);
     int removefd(int fd);
     int modfd(int fd, int ev);
     int wait(int time = -1);

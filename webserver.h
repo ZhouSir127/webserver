@@ -46,7 +46,7 @@ private:
     bool listenET;
     bool connectET;
 
-    threadpool *m_pool;
+    threadpool m_pool;
 
     int m_log_write;
     int m_close_log;

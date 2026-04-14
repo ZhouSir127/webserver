@@ -3,18 +3,13 @@
 
 bool threadpool::append(int fd, bool EPOLLOUT)
 {
-    m_queuelocker.lock();
+    unique_lock<std::mutex> lock(m_queuelocker);
     
-    if (m_workqueue.size() >= m_max_requests)
-    {
-        m_queuelocker.unlock();
+    if (m_workqueue.size() > max_requests)
         return false;
-    }
     
     m_workqueue.push({fd,EPOLLOUT} );
-    
-    m_queuelocker.unlock();
-    
+        
     m_queuestat.post();
     return true;
 }

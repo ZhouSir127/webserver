@@ -8,7 +8,7 @@
 #include <pthread.h>
 #include "block_queue.h"
 
-using namespace std;
+
 
 class Log
 {

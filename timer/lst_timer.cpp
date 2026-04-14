@@ -10,7 +10,7 @@ bool sort_timer_lst::add_timer(int sock)
     if(sock>MAX_FD||users_timer[sock] )
         return false;
     
-    std::shared_ptr<util_timer> timer = std::make_shared<util_timer> (time(nullptr)+LIFE_SPAN,sock);
+    std::shared_ptr<util_timer> timer = std::make_shared<util_timer> (sock);
 
     timer->next=tail;
     timer->prev=tail->prev;
@@ -95,8 +95,7 @@ void Signal::sig_handler(int sig)
 {
     //为保证函数的可重入性，保留原来的errno
     int save_errno = errno;
-    int msg = sig;
-    write(m_pipefd[1], (char *)&msg, 1);
+    write(m_pipefd[1], (char *)&sig, 1);
     errno = save_errno;
 }
 
@@ -105,16 +104,18 @@ void Signal::addsig(int sig, void(*handler)(int), bool restart)
 {
     struct sigaction sa;
     memset(&sa, '\0', sizeof(sa));
+    
     sa.sa_handler = handler;
+    
     if (restart)
         sa.sa_flags |= SA_RESTART;
+    
     sigfillset(&sa.sa_mask);
     assert(sigaction(sig, &sa, NULL) != -1);
 }
 
 bool Signal::dealwithsignal (bool &timeout, bool &stop_server) const
 {
-    int sig;
     char signals[1024];
     int ret = recv(m_pipefd[0], signals, sizeof(signals), 0);
     if (ret <= 0)
@@ -140,8 +141,8 @@ bool Signal::dealwithsignal (bool &timeout, bool &stop_server) const
 //定时处理任务，重新定时以不断触发SIGALRM信号
 void Utils::timer_handler()
 {
-    Signal::getInstance().alarm();
     m_timer_lst.tick();
+    Signal::getInstance().alarm();
 }
 
 
