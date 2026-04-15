@@ -31,7 +31,6 @@
 #include "consts.h"
 #include "../threadpool/threadpool.h"
 
-
 enum METHOD
 {
     GET = 0,

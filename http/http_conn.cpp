@@ -8,7 +8,7 @@
 #include <string>
 #include <sstream>
 #include "../consts.h"
-#include "../mavlink/v2.0/mavlink.h"
+#include "../c_library_v2-master/common/mavlink.h"
 
 //定义http响应的一些状态信息
 const char *ok_200_title = "OK";
