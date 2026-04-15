@@ -77,7 +77,7 @@ public:
     bool init();
     HTTP_CODE process();
     
-    bool read_once();
+    HTTP_CODE read_once();
     bool write();
     bool getLinger() const { return m_linger;}
 
@@ -100,6 +100,8 @@ private:
     bool add_blank_line();
 
 private:
+    std::string line;
+
     std::mutex m_lock;
     bool m_linger;
     

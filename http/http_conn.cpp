@@ -6,6 +6,7 @@
 #include <memory>
 #include <cstdlib>
 #include <string>
+#include <sstream>
 #include "../consts.h"
 
 //定义http响应的一些状态信息
@@ -55,8 +56,12 @@ HTTP_CODE http_conn::parse_line()
             if ( m_checked_idx + 1 == m_read_idx )
                 return NO_REQUEST;
             else if ( m_read_buf[m_checked_idx+1] == '\n'){
-                m_read_buf[m_checked_idx++] = '\0';
-                m_read_buf[m_checked_idx++] = '\0';
+
+                line = std::string(m_read_buf.begin() + m_start_idx , m_read_buf.begin() + m_checked_idx);
+                
+                m_checked_idx += 2;
+                m_start_idx = m_checked_idx;
+
                 return GET_REQUEST;
             }
             return BAD_REQUEST;//'\r后非'\n'
@@ -69,7 +74,7 @@ HTTP_CODE http_conn::parse_line()
 
 //循环读取客户数据，直到无数据可读或对方关闭连接
 //非阻塞ET工作模式下，需要一次性将数据读完
-bool http_conn::read_once()
+HTTP_CODE http_conn::read_once()
 {
     //LT读取数据
     if (!connectET){
@@ -80,10 +85,10 @@ bool http_conn::read_once()
     
         if (bytes_read < 0 ){
             if (errno == EAGAIN || errno == EWOULDBLOCK)//无数据可读
-                return true;
-            return false;
-        }else if (bytes_read == 0)//对方正常关闭了连接
-            return false;
+                return NO_REQUEST;
+            return BAD_REQUEST;//读故障
+        }else if (bytes_read == 0)//对方正常关闭了连接或缓冲大小上限
+            return BAD_REQUEST;
         
         m_read_idx += bytes_read;
     }else
@@ -97,105 +102,86 @@ bool http_conn::read_once()
             {
                 if (errno == EAGAIN || errno == EWOULDBLOCK)
                     break;
-                return false;
+                return BAD_REQUEST;
             }
             else if (bytes_read == 0)
-                return false;
+                return BAD_REQUEST;
             
             m_read_idx += bytes_read;
         }
-    return true;
+    return GET_REQUEST;
 }
 
 //解析http请求行，获得请求方法，目标url及http版本号
 HTTP_CODE http_conn::parse_request_line()
 {
-    int method = m_start_idx;
-    
-    m_start_idx = m_read_buf.find_first_of(" \t", m_start_idx );
-    if (m_start_idx == std::string::npos)
-        return BAD_REQUEST;
-    
-    m_read_buf[m_start_idx++] = '\0';
-    
-    m_start_idx = m_read_buf.find_first_not_of(" \t",m_start_idx);
-    if (m_start_idx == std::string::npos)
+    std::istringstream iss(line);
+    std::string token;
+
+    if(!(iss >> token) )
         return BAD_REQUEST;
 
-    if ( m_read_buf.compare(method,3,"GET") == 0 )
+    if ( token.compare("GET") == 0 )
         m_method = GET;
-    else if (  m_read_buf.compare(method,4,"POST") == 0 ){
+    else if (  token.compare("POST") == 0 ){
         m_method = POST;
         cgi = 1;
     }else
         return BAD_REQUEST;
-    
-    int url = m_start_idx ;
 
-    m_start_idx = m_read_buf.find_first_of(" \t", m_start_idx );
-    if (m_start_idx == std::string::npos)
+    if(!(iss >> token) )
         return BAD_REQUEST;
     
-    int end = m_start_idx;
-    m_read_buf[m_start_idx++] = '\0';
+    int pos(0);
+
+    if ( token.compare(0 , 7 ,"http://") == 0){
+        pos = token.find_first_of('/',7);
     
-    m_start_idx = m_read_buf.find_first_not_of(" \t",m_start_idx);
-    if (m_start_idx == std::string::npos)
-        return BAD_REQUEST;
-
-    if ( m_read_buf.compare(url, 7 ,"http://") == 0)
-    {
-        url += 7;
-        url = m_read_buf.find_first_of('/',url);
-
-        if (url == std::string::npos )
+        if (pos == std::string::npos )
             return BAD_REQUEST;
-    }else if (m_read_buf.compare(url, 8 ,"https://") == 0){
-        url += 8;
-        url = m_read_buf.find_first_of('/',url);
-        
-        if ( url == std::string::npos )
+    }else if (token.compare(pos, 8 ,"https://") == 0){
+        pos = line.find_first_of('/',8);
+    
+        if ( pos == std::string::npos )
             return BAD_REQUEST;
-    }else if(m_url[0] != '/')
+    }else if(token[0] != '/')
         return BAD_REQUEST;
 
-    m_url = std::string(m_read_buf.begin()+url,m_read_buf.begin()+end);
+    m_url = std::string(m_read_buf.begin()+pos,m_read_buf.end() );
+    
+    if(!(iss >> token) )
+        return BAD_REQUEST;
 
-    if (m_read_buf.compare(m_start_idx, 8 ,"HTTP/1.1") != 0)
+    if (line.compare(pos , 8 ,"HTTP/1.1") != 0)
         return BAD_REQUEST;    
 
-    m_start_idx=m_checked_idx;
-
     m_check_state = CHECK_STATE_HEADER;
-    return NO_REQUEST;
+    return GET_REQUEST;
 }
 
 //解析http请求的一个头部信息
 HTTP_CODE http_conn::parse_headers()
 {
-    if (*m_start_ptr == '\0')//请求头最后的空行
+    if ( line.empty() )//请求头最后的空行
     {
-        m_start_ptr=m_read_buf + m_checked_idx;
-
-        if (m_content_length >0 ){
-            m_check_state = CHECK_STATE_CONTENT;
-            return NO_REQUEST;
-        }
+        m_check_state = CHECK_STATE_CONTENT;       
         return GET_REQUEST;
-    }else if (strncasecmp(m_start_ptr, "Connection:", 11) == 0){
-        m_start_ptr += 11;
-        m_start_ptr += strspn(m_start_ptr, " \t");
-        if (strcasecmp(m_start_ptr, "keep-alive") == 0)
+    }else if (line.compare(0, 11 ,"Connection:") == 0){
+        int pos = line.find_first_not_of ( " \t" , 11 );
+        if(pos == std::string::npos)
+            return BAD_REQUEST;
+        if ( line.compare(pos, 10 , "keep-alive") == 0)
             m_linger = true;
-    }else if (strncasecmp(m_start_ptr, "Content-length:", 15) == 0){
-        m_start_ptr += 15;
-        m_start_ptr += strspn(m_start_ptr , " \t");
-        long len = strtol(m_start_ptr,nullptr,10);
+    }else if (line.compare(0 , 15 , "Content-length:") == 0){
+        int pos = line.find_first_not_of ( " \t" , 15 );
+        if(pos == std::string::npos)
+            return BAD_REQUEST;
+
+        long len = stol(std::string(line.begin()+pos , line.end() ) );
         if ( len < 0 ) 
             return BAD_REQUEST;
         
-        m_content_length=len;
-    
+        m_content_length=len;    
     }else if (strncasecmp(m_start_ptr, "Host:", 5) == 0){
         m_start_ptr += 5;
         m_start_ptr += strspn(m_start_ptr, " \t");
@@ -203,14 +189,16 @@ HTTP_CODE http_conn::parse_headers()
     }else
         return BAD_REQUEST;
 
-    m_start_ptr=m_read_buf + m_checked_idx;
-    return NO_REQUEST;
+    m_start_idx = m_checked_idx;
+    return GET_REQUEST;
 }
 
 HTTP_CODE http_conn::process_read()
 {
-    if (read_once() == false )//对方关闭了连接或读故障
-        return BAD_REQUEST;
+    HTTP_CODE ret = read_once();
+    if ( ret == BAD_REQUEST || ret == NO_REQUEST )//对方关闭了连接或读故障或缓冲大小上限
+        return ret;
+    
     while(true)
         if(m_check_state == CHECK_STATE_CONTENT){
             if (m_read_idx - m_checked_idx >= m_content_length )
@@ -229,20 +217,12 @@ HTTP_CODE http_conn::process_read()
             HTTP_CODE line_status = parse_line();
             if (line_status != GET_REQUEST )
                 return line_status;
-            //[m_start_line,m_check_line)刚分割出来的解析
+            
             if(m_check_state == CHECK_STATE_REQUESTLINE ){
-                HTTP_CODE ret = parse_request_line();
-                
-                if (ret == BAD_REQUEST)
+                if (parse_request_line() == BAD_REQUEST)
                     return BAD_REQUEST;
-            }else{
-                HTTP_CODE ret = parse_headers();
-                    
-                if (ret == BAD_REQUEST)
-                    return BAD_REQUEST;
-                else if (ret == GET_REQUEST)
-                    return do_request();
-            }
+            }else if (parse_headers() == BAD_REQUEST)
+                return BAD_REQUEST;
         }
     return BAD_REQUEST;
 }
