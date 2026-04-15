@@ -123,7 +123,7 @@ private:
     METHOD m_method;
     std::string m_real_file;
     std::string m_url;
-    char *m_host;
+    std::string m_host;
     long m_content_length;
     char *m_file_address;
     struct stat m_file_stat;

@@ -3,7 +3,8 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}",
+                "${workspaceFolder}/mavlink/v2.0"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++",

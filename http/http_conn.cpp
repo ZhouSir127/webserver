@@ -8,6 +8,7 @@
 #include <string>
 #include <sstream>
 #include "../consts.h"
+#include "../mavlink/v2.0/mavlink.h"
 
 //定义http响应的一些状态信息
 const char *ok_200_title = "OK";
@@ -30,7 +31,6 @@ bool http_conn::init()
     m_method = GET;
     
     m_content_length = 0;
-    m_host = 0;
     
     m_start_idx = 0;
     m_checked_idx = 0;
@@ -182,14 +182,14 @@ HTTP_CODE http_conn::parse_headers()
             return BAD_REQUEST;
         
         m_content_length=len;    
-    }else if (strncasecmp(m_start_ptr, "Host:", 5) == 0){
-        m_start_ptr += 5;
-        m_start_ptr += strspn(m_start_ptr, " \t");
-        m_host = m_start_ptr;
+    }else if ( line.compare( 0 , 5 ,"Host:") == 0){
+        int pos = line.find_first_not_of ( " \t" , 5 );
+        if(pos == std::string::npos)
+            return BAD_REQUEST;
+        m_host = std::string(line.begin()+pos, line.end() );
     }else
         return BAD_REQUEST;
 
-    m_start_idx = m_checked_idx;
     return GET_REQUEST;
 }
 
@@ -201,17 +201,20 @@ HTTP_CODE http_conn::process_read()
     
     while(true)
         if(m_check_state == CHECK_STATE_CONTENT){
-            if (m_read_idx - m_checked_idx >= m_content_length )
+            if (m_content_length == 0) 
+                return do_request();
+            else if (m_read_idx - m_checked_idx >= m_content_length )
             {
                 //m_read_buf[m_checked,m_read_idx)已经读到的但尚未check
                 //text[0:content_length)为请求体内容
-                m_read_buf[m_checked_idx = m_start_idx + m_content_length ] = '\0';
+                m_checked_idx = m_start_idx + m_content_length ;
                 //POST请求中最后为输入的用户名和密码
                 m_string = std::string(m_read_buf.begin() + m_start_idx ,m_read_buf.begin() + m_checked_idx);
-                m_start_idx = m_checked_idx;
+                m_start_idx = m_checked_idx = m_read_idx;
                 
                 return do_request();
             }
+            
             return NO_REQUEST;
         }else{
             HTTP_CODE line_status = parse_line();
