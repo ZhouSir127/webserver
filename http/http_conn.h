@@ -24,12 +24,25 @@
 #include <memory>
 #include <filesystem>
 #include <string>
-
+#include <unordered_map>
 #include "../lock/locker.h"
 #include "../CGImysql/sql_connection_pool.h"
 #include "../log/log.h"
-#include "consts.h"
+#include "../consts.h"
 #include "../threadpool/threadpool.h"
+
+//#include "MAVSDK/cpp/src/mavsdk/core/include/mavsdk/mavsdk.hpp"
+// #include "MAVSDK/cpp/src/mavsdk/core/include/mavsdk/system.hpp"
+// #include "MAVSDK/cpp/src/mavsdk/plugins/action/include/plugins/action/action.hpp"
+// #include "MAVSDK/cpp/src/mavsdk/plugins/telemetry/include/plugins/telemetry/telemetry.hpp"
+// #include "MAVSDK/cpp/src/mavsdk/plugins/mission/include/plugins/mission/mission.hpp"
+
+// 仅仅是声明，使用 extern
+extern mavsdk::Mavsdk mavsdk;
+extern std::shared_ptr<mavsdk::System> drone;
+extern std::shared_ptr<mavsdk::Action> action;
+extern std::shared_ptr<mavsdk::Telemetry> telemetry;
+
 
 enum METHOD
 {
@@ -51,7 +64,7 @@ enum CHECK_STATE
 };
 enum HTTP_CODE
 {
-    NO_REQUEST= 0 ,
+    NO_REQUEST = 0 ,
     GET_REQUEST,
     BAD_REQUEST,
     NO_RESOURCE,
@@ -65,7 +78,7 @@ class http_conn
 {
 public:
     http_conn(bool connectET,int sockfd, string& root,connection_pool&m_connPool,std::unordered_map<std::string,std::string>&m_users)
-    :connectET(connectET),m_sockfd(sockfd),doc_root(root),m_connPool(m_connPool),m_users(m_users),m_read_buf(nullptr)
+    :connectET(connectET),m_sockfd(sockfd),m_connPool(m_connPool),m_users(m_users),m_read_buf(nullptr)
     {
     init();
     }
@@ -75,65 +88,76 @@ public:
 public:
     bool init();
     HTTP_CODE process();
-    
-    HTTP_CODE read_once();
     bool write();
     bool getLinger() const { return m_linger;}
 
 private:
-    void reset_conn();
+    
     HTTP_CODE process_read();
-    bool process_write(HTTP_CODE ret);
+    HTTP_CODE read_once();
+    HTTP_CODE parse_line();
     HTTP_CODE parse_request_line();
     HTTP_CODE parse_headers();
     HTTP_CODE do_request();
-    HTTP_CODE parse_line();
+    
     void unmap();
-    bool add_response(const char *format, ...);
-    bool add_content(const char *content);
-    bool add_status_line(int status, const char *title);
-    bool add_headers(int content_length);
+
+    bool process_write(HTTP_CODE ret);
+    
+    template<typename... Args>
+    bool add_response(const std::string& format, Args&&... args ){
+        if (m_write_buf.size() >= WRITE_BUFFER_SIZE)
+            return false;
+        
+        ss << format;
+        (ss << ... << std::forward<Args>(args)); 
+
+        std::string content = ss.str();
+
+        if (m_write_buf.size() + content.size() > WRITE_BUFFER_SIZE)
+            return false;
+
+        m_write_buf.append(content);
+
+        LOG_INFO("request:%s", m_write_buf.c_str());
+
+        return true;
+    }
+    
+    bool add_content(int status);
+    bool add_status_line(int status);
     bool add_content_type();
-    bool add_content_length(int content_length);
-    bool add_linger();
-    bool add_blank_line();
 
 private:
+    bool connectET;
+    int m_sockfd;
+    connection_pool& m_connPool;
+    std::unordered_map<std::string,std::string>& m_users; 
+    std::string m_read_buf;
+    
     std::string line;
 
-    std::mutex m_lock;
     bool m_linger;
     
-    std::string& doc_root;
-    connection_pool& m_connPool;
-    std::unordered_map<std::string,std::string>& m_users;
-
-    int m_sockfd;
-    
-    std::string m_read_buf;
     int m_read_idx;
     int m_checked_idx;
     int m_start_idx;
 
     std::string m_write_buf;
-    int m_write_idx;
+    int bytes_to_send;
+    int bytes_have_send;
     
     CHECK_STATE m_check_state;
     METHOD m_method;
     std::string m_real_file;
-    std::string m_url;
+    char m_url;
     std::string m_host;
     long m_content_length;
     char *m_file_address;
-    struct stat m_file_stat;
     struct iovec m_iv[2];
     int m_iv_count;
-    int cgi;        //是否启用的POST
     std::string m_string; //存储请求体数据
-    int bytes_to_send;
-    int bytes_have_send;
-    
-    bool connectET;
+    std::string m_url;
 };
 
 class HTTP{
@@ -143,7 +167,6 @@ private:
 bool connectET;
 
 std::vector<std::unique_ptr<http_conn> > users;
-std::string m_root;
 
 connection_pool connPool;
 std::unordered_map<std::string, std::string> m_users;
@@ -152,7 +175,7 @@ public:
     HTTP(bool connectET,const string& User, const string& passWord, const string& databaseName, int sql_num)
     :connectET(connectET),
     users(1+MAX_FD),
-    m_root(std::filesystem::current_path().string()+"/root"),
+    
     connPool("localhost",3306,User,passWord,databaseName,sql_num)
     { 
         //先从连接池中取一个连接

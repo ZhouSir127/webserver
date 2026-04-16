@@ -8,18 +8,11 @@
 #include <string>
 #include <sstream>
 #include "../consts.h"
-#include "../c_library_v2-master/common/mavlink.h"
 
-//定义http响应的一些状态信息
-const char *ok_200_title = "OK";
-const char *error_400_title = "Bad Request";
-const char *error_400_form = "Your request has bad syntax or is inherently impossible to staisfy.\n";
-const char *error_403_title = "Forbidden";
-const char *error_403_form = "You do not have permission to get file form this server.\n";
-const char *error_404_title = "Not Found";
-const char *error_404_form = "The requested file was not found on this server.\n";
-const char *error_500_title = "Internal Error";
-const char *error_500_form = "There was an unusual problem serving the request file.\n";
+mavsdk::Mavsdk mavsdk;
+std::shared_ptr<mavsdk::System> drone = nullptr;
+std::shared_ptr<mavsdk::Action> action = nullptr;
+std::shared_ptr<mavsdk::Telemetry> telemetry = nullptr;
 
 
 bool http_conn::init()
@@ -37,10 +30,6 @@ bool http_conn::init()
     m_read_idx = 0;
     m_write_idx = 0;
     
-    cgi = 0;
-
-    m_url.clear();
-
     m_read_buf.resize(1024,0);
     m_write_buf.resize(1024,0);
     m_real_file.resize(1024,0);
@@ -78,17 +67,19 @@ HTTP_CODE http_conn::read_once()
 {
     //LT读取数据
     if (!connectET){
-        if(m_read_buf.size()==m_read_idx)
+        if(m_read_buf.size()==m_read_idx){
+            if(m_read_buf.size() == READ_BUFFER_SIZE)
+                return BAD_REQUEST;
             m_read_buf.resize( min( (m_read_buf.size()<<1),(size_t)READ_BUFFER_SIZE) );
-        
+        }
         int bytes_read = recv(m_sockfd, &m_read_buf[m_read_idx] ,m_read_buf.size()-m_read_idx,0);
     
         if (bytes_read < 0 ){
             if (errno == EAGAIN || errno == EWOULDBLOCK)//无数据可读
                 return NO_REQUEST;
             return BAD_REQUEST;//读故障
-        }else if (bytes_read == 0)//对方正常关闭了连接或缓冲大小上限
-            return BAD_REQUEST;
+        }else if (bytes_read == 0)//对方正常关闭了连接
+            return CLOSED_CONNECTION;
         
         m_read_idx += bytes_read;
     }else
@@ -98,14 +89,12 @@ HTTP_CODE http_conn::read_once()
                 m_read_buf.resize(m_read_buf.size()<<1 );
 
             int bytes_read = recv(m_sockfd, &m_read_buf[m_read_idx], m_read_buf.size()-m_read_idx , 0);
-            if (bytes_read < 0 )
-            {
+            if (bytes_read < 0 ){
                 if (errno == EAGAIN || errno == EWOULDBLOCK)
                     break;
                 return BAD_REQUEST;
-            }
-            else if (bytes_read == 0)
-                return BAD_REQUEST;
+            }else if (bytes_read == 0)
+                return CLOSED_CONNECTION;
             
             m_read_idx += bytes_read;
         }
@@ -123,10 +112,9 @@ HTTP_CODE http_conn::parse_request_line()
 
     if ( token.compare("GET") == 0 )
         m_method = GET;
-    else if (  token.compare("POST") == 0 ){
+    else if (  token.compare("POST") == 0 )
         m_method = POST;
-        cgi = 1;
-    }else
+    else
         return BAD_REQUEST;
 
     if(!(iss >> token) )
@@ -139,20 +127,20 @@ HTTP_CODE http_conn::parse_request_line()
     
         if (pos == std::string::npos )
             return BAD_REQUEST;
-    }else if (token.compare(pos, 8 ,"https://") == 0){
-        pos = line.find_first_of('/',8);
+    }else if (token.compare(0, 8 ,"https://") == 0){
+        pos = token.find_first_of('/',8);
     
         if ( pos == std::string::npos )
             return BAD_REQUEST;
     }else if(token[0] != '/')
         return BAD_REQUEST;
 
-    m_url = std::string(m_read_buf.begin()+pos,m_read_buf.end() );
-    
+    m_url = token;
+
     if(!(iss >> token) )
         return BAD_REQUEST;
 
-    if (line.compare(pos , 8 ,"HTTP/1.1") != 0)
+    if (token.compare(pos , 0 ,"HTTP/1.1") != 0)
         return BAD_REQUEST;    
 
     m_check_state = CHECK_STATE_HEADER;
@@ -196,7 +184,7 @@ HTTP_CODE http_conn::parse_headers()
 HTTP_CODE http_conn::process_read()
 {
     HTTP_CODE ret = read_once();
-    if ( ret == BAD_REQUEST || ret == NO_REQUEST )//对方关闭了连接或读故障或缓冲大小上限
+    if ( ret == BAD_REQUEST || ret == NO_REQUEST || ret == CLOSED_CONNECTION )//对方关闭了连接或读故障或缓冲大小上限或
         return ret;
     
     while(true)
@@ -232,120 +220,132 @@ HTTP_CODE http_conn::process_read()
 
 HTTP_CODE http_conn::do_request()
 {
-    strcpy(m_real_file, doc_root);
-    int len = strlen(doc_root);
+    std::string m_read_buf;
+
+    if(m_method == POST){
+        std::string name , password;
+        std::istringstream iss(m_string);
+        
+        if( !(iss >> name) )
+            return BAD_REQUEST;
+        if( !(iss >> password) )
+            return BAD_REQUEST;
     
-    if (strcmp(m_url, "/") == 0)
-        snprintf(m_real_file + len, FILENAME_LEN - len, "/judge.html");   
-    else{
-        const char *p = strrchr(m_url, '/');
-        if (!p)
-            return BAD_REQUEST;
-        
-        if (!*++p)
-            return BAD_REQUEST;
-        
-        //处理cgi
-        if (cgi == 1 && (*p == '2' || *p  == '3') ){//  /api/2login、/user/3register
-            //根据标志判断是登录检测还是注册检测
-            snprintf(m_real_file + len, FILENAME_LEN - len, "/%s", p+1);
-        
-            //将用户名和密码提取出来
-            //user=123&passwd=123
-            char name[100], password[100];
-            int i=0,j=5;
-            
-            while(i<100 && m_string[j]!='&'){
-                name[i] = m_string[j];
-                ++i,++j;
-            }
-            
-            if ( i==100 )
-                return BAD_REQUEST;
-            
-            name[i]='\0';
+        if (m_url[1] == 0){    
+            if (m_users.find(name) == m_users.end() ){
+                std::string sql_insert = "INSERT INTO user(username, passwd) VALUES('" 
+                        + name 
+                        + "', '" 
+                        + password 
+                        + "')";
 
-            j+=8;
-            i=0;
-
-            while(i < 100 && m_string[j]){
-                password[i]=m_string[j];
-                ++i,++j;
-            }
-            
-            if(i == 100)
-                return BAD_REQUEST;
-
-            password[i]= '\0';
-
-            if (*p == '3')
-            {
-                //如果是注册，先检测数据库中是否有重名的
-                //没有重名的，进行增加数据
-                char *sql_insert = (char *)malloc(sizeof(char) * 200);
-                strcpy(sql_insert, "INSERT INTO user(username, passwd) VALUES(");
-                strcat(sql_insert, "'");
-                strcat(sql_insert, name);
-                strcat(sql_insert, "', '");
-                strcat(sql_insert, password);
-                strcat(sql_insert, "')");
-            
-                if (m_users.find(name) == m_users.end() )
-                {
-                    MYSQL *mysql=nullptr;
-                    connectionRAII mysqlcon(mysql, &m_connPool);
-                    
-                    m_lock.lock();
-                    int res = mysql_query(mysql, sql_insert);
+                MYSQL *mysql=nullptr;
+                connectionRAII mysqlcon(mysql, &m_connPool);
+                
+                if (mysql_query(mysql, sql_insert.data() ) == 0){
+                    m_real_file = std::string(doc_root + "/log.html");
                     m_users[name]=password;
-                    m_lock.unlock();
-
-                    if (!res)
-                        strcpy(m_url, "/log.html");
-                    else
-                        strcpy(m_url, "/registerError.html");
-                }
-                else
-                    strcpy(m_url, "/registerError.html");
+                }else
+                    m_real_file = std::string(doc_root + "/registerError.html");
+            }else
+                m_real_file = std::string(doc_root + "/registerError.html");
+    
+        }else if ( m_users[name] == password)
+            m_real_file = std::string(doc_root + "/index.html");
+        else
+            m_real_file = std::string("doc_root + /logError.html");    
+    }else{
+        if(m_url.size() == 1)
+            m_real_file = std::string(doc_root + "/log.html" );
+        else
+            switch (m_url[1]){
+                case 0:
+                    m_real_file = std::string(doc_root + "/register.html" );
+                    break;
+                case 1:
+                    mavsdk.add_any_connection("udp://:14540");
+                    // 简易处理：等待飞控连接
+                    usleep(100000); 
+                    if (mavsdk.systems().size() > 0) {
+                        drone = mavsdk.systems().at(0);
+                        action = std::make_shared<mavsdk::Action>(drone);
+                        telemetry = std::make_shared<mavsdk::Telemetry>(drone);
+                    }
+                  break;
+                case 2:// /2 -> /disconnect
+                    action = nullptr;
+                    telemetry = nullptr;
+                    drone == nullptr;
+                    LOG_INFO("无人机连接已断开");
+                    break;
+                case 3:
+                    // /3 -> connstatus
+                    if (drone) {
+                        bool is_conn = drone->is_connected();
+                        LOG_INFO("连接状态: %d", is_conn);
+                    }
+                    break;
+                case 4: // /4 -> arm
+                    if (action) action->arm();
+                    break;
+                case 5: // /5 -> disarm
+                    if (action) action->disarm();
+                    break;
+                case 6: // /6 -> mode (切换为 hold 模式演示)
+                    if (action) action->hold(); 
+                    break;
+                case 7: // /7 -> takeoff
+                    if (action) action->takeoff();
+                    break;
+                case 8: // /8 -> land
+                    if (action) action->land();
+                    break;
+                case 9: // /9 -> rtl
+                    if (action) action->return_to_launch();
+                    break;
+                case 10: // /10 -> goto
+                    // goto 需要额外的经纬度参数，通常前端发 /10?lat=xx&lon=xx，此处预留
+                    break;
+                case 11: // /11 -> position
+                    if (telemetry) telemetry->position();
+                    break;
+                case 12: // /12 -> velocity
+                    if (telemetry) telemetry->velocity_ned();
+                    break;
+                case 13: // /13 -> attitude
+                    if (telemetry) telemetry->attitude_euler();
+                    break;
+                case 14: // /14 -> battery
+                    if (telemetry) telemetry->battery();
+                    break;
+                case 15: // /15 -> gps
+                    if (telemetry) telemetry->gps_info();
+                    break;
+                case 16: // /16 -> state
+                    if (telemetry) telemetry->health();
+                    break;
             }
-            //如果是登录，直接判断
-            //若浏览器端输入的用户名和密码在表中可以查找到，返回1，否则返回0
-            else if ( *p  == '2')
-            {
-                if (m_users.find(name) != m_users.end() && m_users[name] == password)
-                    strcpy(m_url, "/welcome.html");
-                else
-                    strcpy(m_url, "/logError.html");
-            }
-        }
-        
-        if (*p == '0')
-            snprintf(m_real_file + len, FILENAME_LEN - len, "/register.html");
-        else if (*p  == '1')
-            snprintf(m_real_file + len, FILENAME_LEN - len, "/log.html");
-        else if (*p == '5')
-            snprintf(m_real_file + len, FILENAME_LEN - len, "/picture.html");
-        else if (*p  == '6')
-            snprintf(m_real_file + len, FILENAME_LEN - len, "/video.html");
-        else if (*p == '7')
-            snprintf(m_real_file + len, FILENAME_LEN - len, "/fans.html");    
-        else 
-            snprintf(m_real_file + len, FILENAME_LEN - len, m_url);
     }
 
-    if (stat(m_real_file, &m_file_stat) < 0)
-        return NO_RESOURCE;
+    if(m_real_file.empty() == false){
+        if (!std::filesystem::exists(m_real_file)  )
+            return NO_RESOURCE;
 
-    if (!(m_file_stat.st_mode & S_IROTH) )
-        return FORBIDDEN_REQUEST;
+        if (!std::filesystem::readable(m_real_file)  )
+            return FORBIDDEN_REQUEST;
 
-    if (S_ISDIR(m_file_stat.st_mode))
-        return BAD_REQUEST;
+        if (!std::filesystem::is_regular_file(m_real_file) )
+            return BAD_REQUEST;
 
-    int fd = open(m_real_file, O_RDONLY);
-    m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    close(fd);
+        auto file_size = std::filesystem::file_size(m_real_file);
+
+        int fd = open(m_real_file.data(), O_RDONLY);
+        m_file_address = (char *)mmap(0, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
+        close(fd);
+    
     return FILE_REQUEST;
+    }
+    return GET_REQUEST;
 }
 
 void http_conn::unmap()
@@ -413,104 +413,92 @@ bool http_conn::write()
     //     }
     // }
 }
-bool http_conn::add_response(const char *format, ...)
-{
-    if (m_write_idx >= WRITE_BUFFER_SIZE)
-        return false;
-    va_list arg_list;
-    va_start(arg_list, format);
-    int len = vsnprintf(m_write_buf + m_write_idx, WRITE_BUFFER_SIZE - 1 - m_write_idx, format, arg_list);
-    if (len >= (WRITE_BUFFER_SIZE - 1 - m_write_idx))
-    {
-        va_end(arg_list);
-        return false;
-    }
-    m_write_idx += len;
-    va_end(arg_list);
 
-    LOG_INFO("request:%s", m_write_buf);
+bool http_conn::add_status_line(int status)
+{
+    static std::unordered_map<int,std::string> title{
+        {200,"OK"},
+        {400,"Bad Request"}, 
+        {403,"Forbidden"},
+        {404,"Not Found"},
+        {500,"Internal Error"}
+    };    
+    
+    return add_response("%s %d %s\r\n", "HTTP/1.1", status, title[status] );
+}
 
-    return true;
-}
-bool http_conn::add_status_line(int status, const char *title)
+// bool http_conn::add_headers(int content_len)
+// {
+//     return add_response("Content-Length:%d\r\n", content_len) && add_response("Connection:%s\r\n", (m_linger == true) ? "keep-alive" : "close") &&
+//            add_response("%s", "\r\n");
+// }
+
+bool http_conn::add_content(int status)
 {
-    return add_response("%s %d %s\r\n", "HTTP/1.1", status, title);
+    static std::unordered_map<int,std::string> form {
+        {400,"Your request has bad syntax or is inherently impossible to staisfy.\n"}, 
+        {403,"You do not have permission to get file form this server.\n"},
+        {404,"The requested file was not found on this server.\n"},
+        {500,"There was an unusual problem serving the request file.\n"}
+    };    
+    
+    return add_response("%s", form[status]);
 }
-bool http_conn::add_headers(int content_len)
-{
-    return add_content_length(content_len) && add_linger() &&
-           add_blank_line();
-}
-bool http_conn::add_content_length(int content_len)
-{
-    return add_response("Content-Length:%d\r\n", content_len);
-}
-bool http_conn::add_content_type()
-{
+
+bool add_content_type(){
     return add_response("Content-Type:%s\r\n", "text/html");
 }
-bool http_conn::add_linger()
-{
-    return add_response("Connection:%s\r\n", (m_linger == true) ? "keep-alive" : "close");
-}
-bool http_conn::add_blank_line()
-{
-    return add_response("%s", "\r\n");
-}
-bool http_conn::add_content(const char *content)
-{
-    return add_response("%s", content);
-}
+
 bool http_conn::process_write(HTTP_CODE ret)
 {
     switch (ret)
     {
-    case INTERNAL_ERROR:
-    {
-        add_status_line(500, error_500_title);
-        add_headers(strlen(error_500_form));
-        if (!add_content(error_500_form))
-            return false;
-        break;
-    }
-    case BAD_REQUEST:
-    {
-        add_status_line(404, error_404_title);
-        add_headers(strlen(error_404_form));
-        if (!add_content(error_404_form))
-            return false;
-        break;
-    }
-    case FORBIDDEN_REQUEST:
-    {
-        add_status_line(403, error_403_title);
-        add_headers(strlen(error_403_form));
-        if (!add_content(error_403_form))
-            return false;
-        break;
-    }
-    case FILE_REQUEST:
-    {
-        add_status_line(200, ok_200_title);
-        if (m_file_stat.st_size != 0)
+        case INTERNAL_ERROR:
         {
-            add_headers(m_file_stat.st_size);
-            m_iv[0].iov_base = m_write_buf;
-            m_iv[0].iov_len = m_write_idx;
-            m_iv[1].iov_base = m_file_address;
-            m_iv[1].iov_len = m_file_stat.st_size;
-            m_iv_count = 2;
-            bytes_to_send = m_write_idx + m_file_stat.st_size;
-            return true;
-        }
-        else
-        {
-            const char *ok_string = "<html><body></body></html>";
-            add_headers(strlen(ok_string));
-            if (!add_content(ok_string))
+            add_status_line(500);
+            add_headers(strlen(error_500_form) );
+            if (!add_content(error_500_form))
                 return false;
+            break;
         }
-    }
+        case BAD_REQUEST:
+        {
+            add_status_line(404);
+            add_headers(strlen(error_404_form) );
+            if (!add_content(error_404_form))
+                return false;
+            break;
+        }
+        case FORBIDDEN_REQUEST:
+        {
+            add_status_line(403);
+            add_headers(strlen(error_403_form));
+            if (!add_content(error_403_form))
+                return false;
+            break;
+        }
+        case FILE_REQUEST:
+        {
+            add_status_line(200);
+            if (m_file_stat.st_size != 0)
+            {
+                add_headers(m_file_stat.st_size);
+                m_iv[0].iov_base = m_write_buf;
+                m_iv[0].iov_len = m_write_idx;
+                m_iv[1].iov_base = m_file_address;
+                m_iv[1].iov_len = m_file_stat.st_size;
+                m_iv_count = 2;
+                bytes_to_send = m_write_idx + m_file_stat.st_size;
+                return true;
+            }
+            else
+            {
+                const char *ok_string = "<html><body></body></html>";
+                add_headers(strlen(ok_string));
+                if (!add_content(ok_string))
+                    return false;
+            }
+        }
     default:
         return false;
     }
@@ -524,12 +512,15 @@ bool http_conn::process_write(HTTP_CODE ret)
 HTTP_CODE http_conn::process(){
 
     HTTP_CODE read_ret = process_read();
-    if (read_ret == NO_REQUEST)
-        return NO_REQUEST;
+    if (read_ret == NO_REQUEST || read_ret == CLOSED_CONNECTION )
+        return read_ret;
     
+    if( read_ret != GET_REQUEST )
+        m_linger = false;
+    //GET_REQUEST || BAD_REQUEST || NO_RESOURCE || FORBIDDEN_REQUEST || FILE_REQUEST || INTERNAL_ERROR
     if ( !process_write(read_ret) )
-        return BAD_REQUEST;
+        return CLOSED_CONNECTION;
 
-    return GET_REQUEST;
+    return read_ret;
 }
 

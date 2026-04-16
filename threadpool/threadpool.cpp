@@ -40,19 +40,19 @@ void threadpool::run()
 
         if ( !EPOLLOUT )
             switch(http.process(fd) ){
-                case BAD_REQUEST:
+                case CLOSED_CONNECTION:
                     epoll.removefd(fd);
                     utils.del_timer(fd);
                     http.close_conn(fd);
                     close(fd);
                     break;
-                case GET_REQUEST:
-                    epoll.modfd(fd,::EPOLLOUT);
-                    utils.adjust_timer(fd);
-                    break;
                 case NO_REQUEST:
                     epoll.modfd(fd,EPOLLIN);
                     utils.adjust_timer(fd);
+                default:
+                    epoll.modfd(fd,::EPOLLOUT);
+                    utils.adjust_timer(fd);
+                    break;
             }            
         else if (http.write(fd) && http.isLinger(fd) ){
             epoll.modfd(fd,EPOLLIN);
