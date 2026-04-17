@@ -39,17 +39,17 @@ void threadpool::run()
 
 
         if ( !EPOLLOUT )
-            switch(http.process(fd) ){
+            switch(http.process(fd) ){//读处理后，无需响应直接关
                 case CLOSED_CONNECTION:
                     epoll.removefd(fd);
                     utils.del_timer(fd);
                     http.close_conn(fd);
                     close(fd);
                     break;
-                case NO_REQUEST:
+                case NO_REQUEST://继续读
                     epoll.modfd(fd,EPOLLIN);
                     utils.adjust_timer(fd);
-                default:
+                default:    //准备发送响应
                     epoll.modfd(fd,::EPOLLOUT);
                     utils.adjust_timer(fd);
                     break;

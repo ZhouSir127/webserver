@@ -14,25 +14,48 @@ std::shared_ptr<mavsdk::System> drone = nullptr;
 std::shared_ptr<mavsdk::Action> action = nullptr;
 std::shared_ptr<mavsdk::Telemetry> telemetry = nullptr;
 
+std::unordered_map<int,std::string> form {
+    {400,"Your request has bad syntax or is inherently impossible to staisfy.\n"}, 
+    {403,"You do not have permission to get file form this server.\n"},
+    {404,"The requested file was not found on this server.\n"},
+    //{500,"There was an unusual problem serving the request file.\n"}
+};    
+std::unordered_map<int,std::string> title {
+    {200,"OK"},
+    {400,"Bad Request"}, 
+    {403,"Forbidden"},
+    {404,"Not Found"},
+    //{500,"Internal Error"}
+};    
 
 bool http_conn::init()
 {
+    m_read_buf.resize(1024);
+    m_read_idx = 0;
+    m_checked_idx = 0;
+    m_start_idx = 0;
+
+    m_check_state = CHECK_STATE_REQUESTLINE;
+    line.clear();
+    m_method = GET;
+    m_url.clear();
+    m_linger = false;
+    m_content_length = 0;
+    m_string.clear();
+
+    m_real_file.clear();
+    
+    m_write_buf.clear();
     bytes_to_send = 0;
     bytes_have_send = 0;
-    m_check_state = CHECK_STATE_REQUESTLINE;
-    m_linger = false;
-    m_method = GET;
-    
-    m_content_length = 0;
-    
-    m_start_idx = 0;
-    m_checked_idx = 0;
-    m_read_idx = 0;
-    m_write_idx = 0;
-    
-    m_read_buf.resize(1024,0);
-    m_write_buf.resize(1024,0);
-    m_real_file.resize(1024,0);
+
+    m_iv_count = 1;
+
+    if (m_file_address) {
+        munmap(m_file_address, m_file_size);
+        m_file_address = nullptr;
+    }
+    m_file_size = 0;
 }
 
 //从状态机，用于分析出一行内容
@@ -87,7 +110,7 @@ HTTP_CODE http_conn::read_once()
         {    
             if(m_read_buf.size()==m_read_idx)
                 m_read_buf.resize(m_read_buf.size()<<1 );
-
+            
             int bytes_read = recv(m_sockfd, &m_read_buf[m_read_idx], m_read_buf.size()-m_read_idx , 0);
             if (bytes_read < 0 ){
                 if (errno == EAGAIN || errno == EWOULDBLOCK)
@@ -165,18 +188,10 @@ HTTP_CODE http_conn::parse_headers()
         if(pos == std::string::npos)
             return BAD_REQUEST;
 
-        long len = stol(std::string(line.begin()+pos , line.end() ) );
-        if ( len < 0 ) 
+        m_content_length = stol(std::string(line.begin()+pos , line.end() ) );
+        if ( m_content_length < 0 ) 
             return BAD_REQUEST;
-        
-        m_content_length=len;    
-    }else if ( line.compare( 0 , 5 ,"Host:") == 0){
-        int pos = line.find_first_not_of ( " \t" , 5 );
-        if(pos == std::string::npos)
-            return BAD_REQUEST;
-        m_host = std::string(line.begin()+pos, line.end() );
-    }else
-        return BAD_REQUEST;
+    }
 
     return GET_REQUEST;
 }
@@ -184,7 +199,7 @@ HTTP_CODE http_conn::parse_headers()
 HTTP_CODE http_conn::process_read()
 {
     HTTP_CODE ret = read_once();
-    if ( ret == BAD_REQUEST || ret == NO_REQUEST || ret == CLOSED_CONNECTION )//对方关闭了连接或读故障或缓冲大小上限或
+    if ( ret != GET_REQUEST )//对方关闭了连接或读故障或缓冲大小上限或
         return ret;
     
     while(true)
@@ -205,13 +220,14 @@ HTTP_CODE http_conn::process_read()
             
             return NO_REQUEST;
         }else{
-            HTTP_CODE line_status = parse_line();
-            if (line_status != GET_REQUEST )
-                return line_status;
+            HTTP_CODE ret = parse_line();
+            if (ret != GET_REQUEST )
+                return ret;
             
             if(m_check_state == CHECK_STATE_REQUESTLINE ){
-                if (parse_request_line() == BAD_REQUEST)
-                    return BAD_REQUEST;
+                HTTP_CODE ret = parse_request_line();
+                if ( ret != GET_REQUEST)
+                    return ret;
             }else if (parse_headers() == BAD_REQUEST)
                 return BAD_REQUEST;
         }
@@ -220,8 +236,6 @@ HTTP_CODE http_conn::process_read()
 
 HTTP_CODE http_conn::do_request()
 {
-    std::string m_read_buf;
-
     if(m_method == POST){
         std::string name , password;
         std::istringstream iss(m_string);
@@ -231,8 +245,8 @@ HTTP_CODE http_conn::do_request()
         if( !(iss >> password) )
             return BAD_REQUEST;
     
-        if (m_url[1] == 0){    
-            if (m_users.find(name) == m_users.end() ){
+        if (m_url[1] == 0){    //注册
+            if (m_users.exists(name) ==false ){
                 std::string sql_insert = "INSERT INTO user(username, passwd) VALUES('" 
                         + name 
                         + "', '" 
@@ -244,13 +258,13 @@ HTTP_CODE http_conn::do_request()
                 
                 if (mysql_query(mysql, sql_insert.data() ) == 0){
                     m_real_file = std::string(doc_root + "/log.html");
-                    m_users[name]=password;
+                    m_users.add(name,password);
                 }else
                     m_real_file = std::string(doc_root + "/registerError.html");
             }else
                 m_real_file = std::string(doc_root + "/registerError.html");
     
-        }else if ( m_users[name] == password)
+        }else if ( m_users.check(name,password) )
             m_real_file = std::string(doc_root + "/index.html");
         else
             m_real_file = std::string("doc_root + /logError.html");    
@@ -326,191 +340,145 @@ HTTP_CODE http_conn::do_request()
                     break;
             }
     }
-
-    if(m_real_file.empty() == false){
+    if(!m_real_file.empty() ){
         if (!std::filesystem::exists(m_real_file)  )
-            return NO_RESOURCE;
+        return NO_RESOURCE;
 
         if (!std::filesystem::readable(m_real_file)  )
             return FORBIDDEN_REQUEST;
 
         if (!std::filesystem::is_regular_file(m_real_file) )
             return BAD_REQUEST;
-
-        auto file_size = std::filesystem::file_size(m_real_file);
-
-        int fd = open(m_real_file.data(), O_RDONLY);
-        m_file_address = (char *)mmap(0, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
-        close(fd);
     
-    return FILE_REQUEST;
+        return FILE_REQUEST;
     }
     return GET_REQUEST;
 }
 
-void http_conn::unmap()
-{
-    if (m_file_address)
-    {
-        munmap(m_file_address, m_file_stat.st_size);
-        m_file_address = 0;
-    }
-}
 bool http_conn::write()
 {
-    // int temp = 0;
+    int temp = 0;
 
-    // if (bytes_to_send == 0)
-    // {
-    // //    modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
-    //  //   init();
-    //     return true;
-    // }
+    // 1. 如果根本没有数据要发送，直接重置等待新请求
+    if (bytes_to_send == 0) {
+        init();
+        return true;
+    }
 
-    // while (1)
-    // {
-    //     temp = writev(m_sockfd, m_iv, m_iv_count);
+    // 2. 核心发送循环
+    while (true) {
+        temp = writev(m_sockfd, m_iv, m_iv_count);
 
-    //     if (temp < 0)
-    //     {
-    //         if (errno == EAGAIN)
-    //         {
-    //             modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
-    //             return true;
-    //         }
-    //         unmap();
-    //         return false;
-    //     }
+        if (temp < 0) {
+            // TCP 写缓冲区已满，必须等待 epoll 触发下一次 EPOLLOUT 唤醒
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return true; 
+            }
+            // 真的发生了网络错误（例如客户端断开连接）
+            return false; 
+        }
 
-    //     bytes_have_send += temp;
-    //     bytes_to_send -= temp;
-    //     if (bytes_have_send >= m_iv[0].iov_len)
-    //     {
-    //         m_iv[0].iov_len = 0;
-    //         m_iv[1].iov_base = m_file_address + (bytes_have_send - m_write_idx);
-    //         m_iv[1].iov_len = bytes_to_send;
-    //     }
-    //     else
-    //     {
-    //         m_iv[0].iov_base = m_write_buf + bytes_have_send;
-    //         m_iv[0].iov_len = m_iv[0].iov_len - bytes_have_send;
-    //     }
+        bytes_have_send += temp;
+        bytes_to_send -= temp;
 
-    //     if (bytes_to_send <= 0)
-    //     {
-    //         unmap();
-    //        //modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
+        // 3. 数据已全部发送完毕
+        if (bytes_to_send <= 0) {
+            unmap(); // 发送完毕，释放 mmap 内存映射 (注意你需要实现这个辅助函数)
+            if (m_linger) {
+                init(); // 长连接：重置当前对象状态，等待下一次请求
+                return true;
+            } else {
+                return false; // 短连接：返回 false 通知外部调用 close_conn
+            }
+        }
 
-    //         if (m_linger)
-    //         {
-    //         //    init();
-    //             return true;
-    //         }
-    //         else
-    //         {
-    //             return false;
-    //         }
-    //     }
-    // }
+        // 4. 数据没发完，动态调整 m_iv 指针以便下一次 writev 从断点继续
+        if (m_iv[0].iov_len > 0) {
+            if (temp >= m_iv[0].iov_len) {
+                // 情况 A：temp 跨界了，发完了整个响应头，还发了一部分文件
+                temp -= m_iv[0].iov_len;
+                m_iv[0].iov_len = 0;
+                m_iv[1].iov_base = (char *)m_iv[1].iov_base + temp;
+                m_iv[1].iov_len -= temp;
+            } else {
+                // 情况 B：temp 只是发了一部分响应头
+                m_iv[0].iov_base = (char *)m_iv[0].iov_base + temp;
+                m_iv[0].iov_len -= temp;
+            }
+        } else {
+            // 情况 C：响应头早已发完，当前仅消耗文件数据
+            m_iv[1].iov_base = (char *)m_iv[1].iov_base + temp;
+            m_iv[1].iov_len -= temp;
+        }
+
+        // ==============================================================
+        // 5. 【核心区分】：LT 与 ET 策略的分水岭
+        // ==============================================================
+        if (!connectET) {
+            // 如果是 LT 模式，我们本次只写一次就主动交出控制权 (return true)。
+            // 没写完的数据依靠 Epoll 下一次的 EPOLLOUT 事件来继续驱动。
+            // 这保证了单个超大文件的下载不会长时间阻塞线程池中的工作线程（保证公平性）。
+            return true;
+        }
+        // 如果是 ET 模式，不做拦截，继续 while(true) 循环，直到触发 EAGAIN
+    }
 }
 
-bool http_conn::add_status_line(int status)
-{
-    static std::unordered_map<int,std::string> title{
-        {200,"OK"},
-        {400,"Bad Request"}, 
-        {403,"Forbidden"},
-        {404,"Not Found"},
-        {500,"Internal Error"}
-    };    
-    
-    return add_response("%s %d %s\r\n", "HTTP/1.1", status, title[status] );
-}
-
-// bool http_conn::add_headers(int content_len)
-// {
-//     return add_response("Content-Length:%d\r\n", content_len) && add_response("Connection:%s\r\n", (m_linger == true) ? "keep-alive" : "close") &&
-//            add_response("%s", "\r\n");
-// }
-
-bool http_conn::add_content(int status)
-{
-    static std::unordered_map<int,std::string> form {
-        {400,"Your request has bad syntax or is inherently impossible to staisfy.\n"}, 
-        {403,"You do not have permission to get file form this server.\n"},
-        {404,"The requested file was not found on this server.\n"},
-        {500,"There was an unusual problem serving the request file.\n"}
-    };    
-    
-    return add_response("%s", form[status]);
-}
-
-bool add_content_type(){
-    return add_response("Content-Type:%s\r\n", "text/html");
-}
 
 bool http_conn::process_write(HTTP_CODE ret)
 {
-    switch (ret)
-    {
-        case INTERNAL_ERROR:
-        {
-            add_status_line(500);
-            add_headers(strlen(error_500_form) );
-            if (!add_content(error_500_form))
-                return false;
-            break;
-        }
-        case BAD_REQUEST:
-        {
-            add_status_line(404);
-            add_headers(strlen(error_404_form) );
-            if (!add_content(error_404_form))
-                return false;
-            break;
-        }
-        case FORBIDDEN_REQUEST:
-        {
-            add_status_line(403);
-            add_headers(strlen(error_403_form));
-            if (!add_content(error_403_form))
-                return false;
-            break;
-        }
-        case FILE_REQUEST:
-        {
-            add_status_line(200);
-            if (m_file_stat.st_size != 0)
-            {
-                add_headers(m_file_stat.st_size);
-                m_iv[0].iov_base = m_write_buf;
-                m_iv[0].iov_len = m_write_idx;
-                m_iv[1].iov_base = m_file_address;
-                m_iv[1].iov_len = m_file_stat.st_size;
-                m_iv_count = 2;
-                bytes_to_send = m_write_idx + m_file_stat.st_size;
-                return true;
-            }
-            else
-            {
-                const char *ok_string = "<html><body></body></html>";
-                add_headers(strlen(ok_string));
-                if (!add_content(ok_string))
-                    return false;
-            }
-        }
-    default:
-        return false;
-    }
-    m_iv[0].iov_base = m_write_buf;
-    m_iv[0].iov_len = m_write_idx;
-    m_iv_count = 1;
-    bytes_to_send = m_write_idx;
+    if( ret == FILE_REQUEST){
+        if (
+        (add_response("HTTP/1.1 ", 200 ,' ',title[200], "\r\n" )&&    
+        add_response("Content-Length: ", form[404].size(), "\r\n" ) && 
+        add_response("Content-Type: ", "text/html" , "\r\n") && 
+        add_response("Connection: " , "close" ,"\r\n") &&
+        add_response("\r\n") 
+        ) == false
+        )return false;
+
+        ++m_iv_count;
+        
+        m_file_size = m_iv[1].iov_len = bytes_to_send = std::filesystem::file_size(m_real_file);
+
+        int fd = open(m_real_file.data(), O_RDONLY);
+        m_iv[1].iov_base = m_file_address = (char *)mmap(0, bytes_to_send, PROT_READ, MAP_PRIVATE, fd, 0);
+        close(fd);
+
+    }else if(ret == BAD_REQUEST){
+        if ( 
+        (add_response("HTTP/1.1 ", 404 ,' ',title[404], "\r\n" ) && 
+        add_response("Content-Length: ", form[404].size(), "\r\n" ) && 
+        add_response("Content-Type: ", "text/plain" , "\r\n") && 
+        add_response("Connection: " , "close" ,"\r\n") &&
+        add_response("\r\n") &&
+        add_response(form[404]) 
+        )==false
+        )  return false;
+    }else if(ret == FORBIDDEN_REQUEST){
+        if (
+        (add_response("HTTP/1.1 ", 403 ,' ',title[403], "\r\n" ) && 
+        add_response("Content-Length: ", form[403].size(), "\r\n" ) && 
+        add_response("Content-Type: ", "text/plain" , "\r\n") && 
+        add_response("Connection: " , "close" ,"\r\n") &&
+        add_response("\r\n") && 
+        add_response(form[403]) 
+        )==false
+        ) return false;
+    }else if(
+        (add_response("HTTP/1.1 ", 200 ,' ',title[200], "\r\n" ) && 
+        add_response("\r\n") 
+        ) == false
+        )return false;
+    
+    m_iv[0].iov_base = const_cast<char*>(m_write_buf.data() );
+    m_iv[0].iov_len = m_write_buf.size();
+    bytes_to_send += m_iv[0].iov_len;
     return true;
 }
 
 HTTP_CODE http_conn::process(){
-
+    
     HTTP_CODE read_ret = process_read();
     if (read_ret == NO_REQUEST || read_ret == CLOSED_CONNECTION )
         return read_ret;

@@ -17,7 +17,7 @@ public:
     static Log *get_instance()
     {
         static Log instance;
-        return &instance;
+         return &instance;
     }
 
     static void *flush_log_thread(void *args)
