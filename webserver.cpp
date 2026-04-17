@@ -6,7 +6,7 @@ WebServer::WebServer(int port,
                 int thread_num,
                 int log_write,int close_log
                 )
-:m_port(port), 
+:m_port(port),
 listenET(listenET),connectET(connectET),
 epoll(listenET,connectET),
 http(connectET,user, passWord, databaseName,sql_num),

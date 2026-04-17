@@ -46,8 +46,6 @@
 // extern std::shared_ptr<mavsdk::System> drone;
 // extern std::shared_ptr<mavsdk::Action> action;
 // extern std::shared_ptr<mavsdk::Telemetry> telemetry;
-
-
 enum METHOD
 {
     GET = 0,
