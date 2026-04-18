@@ -92,9 +92,9 @@ HTTP_CODE http_conn::read_once()
     //LT读取数据
     if (!connectET){
         if(m_read_buf.size()==m_read_idx){
-            if(m_read_buf.size() == READ_BUFFER_SIZE)
+            if(m_read_buf.size() == consts::READ_BUFFER_SIZE)
                 return BAD_REQUEST;
-            m_read_buf.resize( min( (m_read_buf.size()<<1),(size_t)READ_BUFFER_SIZE) );
+            m_read_buf.resize( std::min( (m_read_buf.size()<<1),(size_t)consts::READ_BUFFER_SIZE) );
         }
         int bytes_read = recv(m_sockfd, &m_read_buf[m_read_idx] ,m_read_buf.size()-m_read_idx,0);
     
@@ -258,24 +258,24 @@ HTTP_CODE http_conn::do_request()
                 connectionRAII mysqlcon(mysql, &m_connPool);
                 
                 if (mysql_query(mysql, sql_insert.data() ) == 0){
-                    m_real_file = std::string(doc_root + "/log.html");
+                    m_real_file = std::string(root + "/log.html");
                     m_users.add(name,password);
                 }else
-                    m_real_file = std::string(doc_root + "/registerError.html");
+                    m_real_file = std::string(root + "/registerError.html");
             }else
-                m_real_file = std::string(doc_root + "/registerError.html");
+                m_real_file = std::string(root + "/registerError.html");
     
         }else if ( m_users.check(name,password) )
-            m_real_file = std::string(doc_root + "/index.html");
+            m_real_file = std::string(root + "/index.html");
         else
-            m_real_file = std::string("doc_root + /logError.html");    
+            m_real_file = std::string("root + /logError.html");    
     }else{
         if(m_url.size() == 1)
-            m_real_file = std::string(doc_root + "/log.html" );
+            m_real_file = std::string(root + "/log.html" );
         else
             switch (m_url[1]){
                 case 0:
-                    m_real_file = std::string(doc_root + "/register.html" );
+                    m_real_file = std::string(root + "/register.html" );
                     break;
                 case 1:
                     mavsdk.add_any_connection("udp://:14540");

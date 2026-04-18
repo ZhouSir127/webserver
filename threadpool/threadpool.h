@@ -17,8 +17,8 @@
 class threadpool
 {
 public:
-    threadpool(Epoll&epoll,Utils&utils,HTTP&http,int thread_number) 
-    :epoll(epoll),utils(utils),http(http),m_thread_number(thread_number),m_threads(m_thread_number,std::thread(&threadpool::worker, this) ){
+    threadpool(Epoll&epoll,Utils&utils,HTTP&http,int thread_number,int max_request) 
+    :epoll(epoll),utils(utils),http(http),m_thread_number(thread_number),max_request(max_request),m_threads(m_thread_number,std::thread(&threadpool::worker, this) ){
         for (int i = 0; i < thread_number; ++i)        
             m_threads[i].detach();
 
@@ -42,6 +42,7 @@ private:
     HTTP&http;
 
     int m_thread_number;        //线程池中的线程数
+    int max_request;
     std::vector<std::thread> m_threads;       //描述线程池的数组，其大小为m_thread_number
     std::queue<std::pair<int,bool> > m_workqueue; //请求队列
     std::mutex m_queuelocker;       //保护请求队列的互斥锁

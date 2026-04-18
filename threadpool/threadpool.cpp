@@ -3,9 +3,9 @@
 
 bool threadpool::append(int fd, bool EPOLLOUT)
 {
-    unique_lock<std::mutex> lock(m_queuelocker);
+    std::unique_lock<std::mutex> lock(m_queuelocker);
     
-    if (m_workqueue.size() > max_requests)
+    if (m_workqueue.size() > max_request)
         return false;
     
     m_workqueue.push({fd,EPOLLOUT} );
@@ -29,7 +29,7 @@ void threadpool::run()
         bool EPOLLOUT;
 
         {
-        unique_lock<std::mutex> lock(m_queuelocker);
+        std::unique_lock<std::mutex> lock(m_queuelocker);
     
         fd=m_workqueue.front().first;
         EPOLLOUT = m_workqueue.front().second;

@@ -1,26 +1,21 @@
 #include "webserver.h"
 
+
 WebServer::WebServer(int port,
                 bool listenET,bool connectET,  
-                char* user, char* passWord, char* databaseName, int sql_num, 
-                int thread_num,
-                bool close_log
-                )
+                int lifeSpan,int timeSlot,
+                const std::string&IP,int sqlport,const std::string& user, const std::string& passWord, const std::string& databaseName, int sql_num,const std::string&root,
+                int thread_num,int max_request,
+                const std::string& file_name,bool close_log 
+            )
 :m_port(port),
-listenET(listenET),connectET(connectET),
+listenET(listenET),
 epoll(listenET,connectET),
-http(connectET,user, passWord, databaseName,sql_num),
-m_pool (epoll,utils,http,thread_num),
-m_close_log(close_log)
+utils(lifeSpan,timeSlot),
+http(connectET, IP, sqlport,user, passWord, databaseName,sql_num,root),
+m_pool (epoll,utils,http,thread_num,max_request)
 {
-    if (0 == m_close_log)
-    {
-        //初始化日志
-        if (1 == m_log_write)
-            Log::get_instance()->init("./ServerLog", m_close_log, 2000, 800000, 800);
-        else
-            Log::get_instance()->init("./ServerLog", m_close_log, 2000, 800000, 0);
-    }
+    Log::init(file_name,close_log);
 }
 
 WebServer::~WebServer()
@@ -67,7 +62,7 @@ bool WebServer::dealclientdata()
             LOG_ERROR("%s:errno is:%d", "accept error", errno);
             return false;
         }
-        if (connfd > MAX_FD)
+        if (connfd > consts::MAX_FD)
         {
             const char *info = "Internal server busy";
             send(connfd, info, strlen(info), 0);
@@ -88,7 +83,7 @@ bool WebServer::dealclientdata()
             int connfd = accept(m_listenfd, (struct sockaddr *)&client_address, &client_addrlength);
             if (connfd < 0)
                 break;
-            if ( connfd > MAX_FD)
+            if ( connfd > consts::MAX_FD)
             {
                 const char *info = "Internal server busy";
                 send(connfd, info, strlen(info), 0);
@@ -107,7 +102,6 @@ bool WebServer::dealclientdata()
 
 void WebServer::eventLoop()
 {
-        //epoll对象创建内核事件表，并注册监听文件描述符
     epoll.addfd(m_listenfd,Epoll::Type::LISTEN);
     epoll.addfd(utils.getPipefd0(), Epoll::Type::PIPE);
 

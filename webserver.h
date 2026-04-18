@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <cassert>
+#include <string>
 
 #include "epoll/epoll.h"
 #include "./threadpool/threadpool.h"
@@ -20,15 +21,13 @@ class WebServer
 {
 public:
 WebServer(int port,
-        bool listenET,bool connectET,  
-        char* user, char* passWord, char* databaseName, int sql_num, 
-        int thread_num,
-        bool close_log
+        bool listenET,bool connectET,
+        int lifeSpan,int timeSlot,
+        const std::string&IP,int sqlport,const std::string& user, const std::string& passWord, const std::string& databaseName, int sql_num, const std::string&root,
+        int thread_num,int max_request,
+        const std::string& file_name,bool close_log
         );
-
-
     ~WebServer();
-
     void eventListen();
     void eventLoop();
 
@@ -39,17 +38,12 @@ private:
     Epoll epoll;
     Utils utils;
     HTTP http;
-   
+    
     int m_port;
     int m_listenfd;
 
     bool listenET;
-    bool connectET;
-
+    
     threadpool m_pool;
-    Log log;
-
-    int m_log_write;
-    int m_close_log;
 };
 #endif

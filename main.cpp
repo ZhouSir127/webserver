@@ -1,20 +1,15 @@
 #include "config.h"
+#include "webserver.h"
 
 int main(int argc, char *argv[])
 {
-    //需要修改的数据库信息,登录名,密码,库名
-    char * user = "root";
-    char* passwd = "root";
-    char* databasename = "qgydb";
-
-    //命令行解析
-    Config config(argc, argv);
-
-    WebServer server(config.PORT, 
-            config.listenET,bool connectET,
-            user,passwd, databasename,config.sql_num,  
-                config.TRIGMode,  ,  config.thread_num, 
-                config.close_log);
+    WebServer server(webserver::PORT,
+            timer::LIFE_SPAN,timer::TIMESLOT,
+            webserver::LISTENET,webserver::CONNECTET,
+            mysql::IP,mysql::PORT,mysql::USER,mysql::PASSWORD,mysql::NAME,mysql::NUM,http::ROOT,
+            threadPool::NUM, threadPool::MAX_REQUEST,
+            log::FILE,log::CLOSE        
+        );
     
     //监听
     server.eventListen();

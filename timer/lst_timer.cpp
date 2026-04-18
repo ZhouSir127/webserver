@@ -5,12 +5,9 @@
 #include <sys/types.h>
 
 
-bool sort_timer_lst::add_timer(int sock)
+void sort_timer_lst::add_timer(int sock)
 {
-    if(sock>MAX_FD||users_timer[sock] )
-        return false;
-    
-    std::shared_ptr<util_timer> timer = std::make_shared<util_timer> (sock);
+    std::shared_ptr<util_timer> timer = std::make_shared<util_timer> (time(nullptr)+lifeSpan,sock);
 
     timer->next=tail;
     timer->prev=tail->prev;
@@ -22,15 +19,12 @@ bool sort_timer_lst::add_timer(int sock)
     prev->next=timer;
         
     users_timer[sock]=timer;
-    return true;
 }
 
-bool sort_timer_lst::adjust_timer(int sockfd){
-    if(sockfd>MAX_FD||users_timer[sockfd]==nullptr )
-        return false;
+void sort_timer_lst::adjust_timer(int sockfd){
     
     std::shared_ptr<util_timer>&timer = users_timer[sockfd];
-    timer->expire=time(nullptr)+LIFE_SPAN;
+    timer->expire=time(nullptr)+lifeSpan;
 
     if( timer != tail->prev.lock() ){    
     
@@ -50,14 +44,10 @@ bool sort_timer_lst::adjust_timer(int sockfd){
         Prev->next=timer;
     }
     
-    return true;
 }
 
-bool sort_timer_lst::del_timer(int sockfd)
-{
-    if(sockfd>MAX_FD||users_timer[sockfd]==nullptr )
-        return false;
-    
+void sort_timer_lst::del_timer(int sockfd)
+{    
     std::shared_ptr<util_timer> &timer = users_timer[sockfd];
 
     std::shared_ptr<util_timer> next = timer -> next.lock();
@@ -67,8 +57,6 @@ bool sort_timer_lst::del_timer(int sockfd)
     next->prev=prev;
     
     timer.reset();
-
-    return true;
 }
 
 void sort_timer_lst::tick()
