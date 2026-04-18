@@ -25,7 +25,6 @@ std::unordered_map<int,std::string> title {
     {400,"Bad Request"}, 
     {403,"Forbidden"},
     {404,"Not Found"},
-    //{500,"Internal Error"}
 };    
 
 void http_conn::init()
