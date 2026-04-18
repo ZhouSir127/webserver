@@ -23,7 +23,7 @@ WebServer(int port,
         bool listenET,bool connectET,  
         char* user, char* passWord, char* databaseName, int sql_num, 
         int thread_num,
-        int log_write,int close_log
+        bool close_log
         );
 
 
@@ -47,6 +47,7 @@ private:
     bool connectET;
 
     threadpool m_pool;
+    Log log;
 
     int m_log_write;
     int m_close_log;

@@ -54,15 +54,22 @@ void threadpool::run()
                     utils.adjust_timer(fd);
                     break;
             }            
-        else if (http.write(fd) && http.isLinger(fd) ){
-            epoll.modfd(fd,EPOLLIN);
-            utils.adjust_timer(fd);
-            http.init(fd);
-        }else{
-            epoll.removefd(fd);
-            utils.del_timer(fd);
-            http.close_conn(fd);
-            close(fd);
-        }   
+        else{
+            HTTP_CODE ret = http.write(fd) ;
+    
+            if ( ret == NO_REQUEST ){//继续写
+                epoll.modfd(fd,EPOLLOUT);
+                utils.adjust_timer(fd);
+            }else if ( ret == GET_REQUEST && http.isLinger(fd) ){
+                epoll.modfd(fd,EPOLLIN);
+                utils.adjust_timer(fd);
+                http.init(fd);
+            }else{
+                epoll.removefd(fd);
+                utils.del_timer(fd);
+                http.close_conn(fd);
+                close(fd);
+            }
+        }
     }
 }

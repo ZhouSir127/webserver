@@ -28,7 +28,7 @@ std::unordered_map<int,std::string> title {
     //{500,"Internal Error"}
 };    
 
-bool http_conn::init()
+void http_conn::init()
 {
     m_read_buf.resize(1024);
     m_read_idx = 0;
@@ -50,6 +50,7 @@ bool http_conn::init()
     bytes_have_send = 0;
 
     m_iv_count = 1;
+    m_iv_idx = 0;
 
     if (m_file_address) {
         munmap(m_file_address, m_file_size);
@@ -355,73 +356,62 @@ HTTP_CODE http_conn::do_request()
     return GET_REQUEST;
 }
 
-bool http_conn::write()
+HTTP_CODE http_conn::write()
 {
-    int temp = 0;
+    if(connectET)
+        while (true) {
+            int temp = writev(m_sockfd, &m_iv[m_iv_idx], m_iv_count);
 
-    // 1. 如果根本没有数据要发送，直接重置等待新请求
-    if (bytes_to_send == 0) {
-        init();
-        return true;
-    }
-
-    // 2. 核心发送循环
-    while (true) {
-        temp = writev(m_sockfd, m_iv, m_iv_count);
-
-        if (temp < 0) {
-            // TCP 写缓冲区已满，必须等待 epoll 触发下一次 EPOLLOUT 唤醒
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                return true; 
+            if (temp < 0) {
+                // TCP 写缓冲区已满，必须等待 epoll 触发下一次 EPOLLOUT 唤醒
+                if (errno == EAGAIN || errno == EWOULDBLOCK) 
+                    return NO_REQUEST; 
+                // 真的发生了网络错误（例如客户端断开连接）
+                return CLOSED_CONNECTION; 
             }
-            // 真的发生了网络错误（例如客户端断开连接）
-            return false; 
-        }
 
-        bytes_have_send += temp;
-        bytes_to_send -= temp;
-
-        // 3. 数据已全部发送完毕
-        if (bytes_to_send <= 0) {
-            unmap(); // 发送完毕，释放 mmap 内存映射 (注意你需要实现这个辅助函数)
-            if (m_linger) {
-                init(); // 长连接：重置当前对象状态，等待下一次请求
-                return true;
-            } else {
-                return false; // 短连接：返回 false 通知外部调用 close_conn
+            bytes_have_send += temp;
+            
+            if (bytes_have_send >= bytes_to_send)
+                return GET_REQUEST;
+            
+            if(m_iv_count == 2 && m_iv_idx == 0 && temp >= m_iv[0].iov_len ){
+                int off(temp-m_iv[0].iov_len);
+                m_iv_idx = 1;
+                m_iv[1].iov_len -= off;
+                m_iv[1].iov_base += off;
+            }else{
+                m_iv[m_iv_idx].iov_len -= temp;  
+                m_iv[m_iv_idx].iov_base += temp;   
             }
-        }
+        }     
+    else{
+            int temp = writev(m_sockfd, &m_iv[m_iv_idx], m_iv_count);
 
-        // 4. 数据没发完，动态调整 m_iv 指针以便下一次 writev 从断点继续
-        if (m_iv[0].iov_len > 0) {
-            if (temp >= m_iv[0].iov_len) {
-                // 情况 A：temp 跨界了，发完了整个响应头，还发了一部分文件
-                temp -= m_iv[0].iov_len;
-                m_iv[0].iov_len = 0;
-                m_iv[1].iov_base = (char *)m_iv[1].iov_base + temp;
-                m_iv[1].iov_len -= temp;
-            } else {
-                // 情况 B：temp 只是发了一部分响应头
-                m_iv[0].iov_base = (char *)m_iv[0].iov_base + temp;
-                m_iv[0].iov_len -= temp;
+            if (temp < 0) {
+                // TCP 写缓冲区已满，必须等待 epoll 触发下一次 EPOLLOUT 唤醒
+                if (errno == EAGAIN || errno == EWOULDBLOCK) 
+                    return NO_REQUEST; 
+                // 真的发生了网络错误（例如客户端断开连接）
+                return CLOSED_CONNECTION; 
             }
-        } else {
-            // 情况 C：响应头早已发完，当前仅消耗文件数据
-            m_iv[1].iov_base = (char *)m_iv[1].iov_base + temp;
-            m_iv[1].iov_len -= temp;
-        }
 
-        // ==============================================================
-        // 5. 【核心区分】：LT 与 ET 策略的分水岭
-        // ==============================================================
-        if (!connectET) {
-            // 如果是 LT 模式，我们本次只写一次就主动交出控制权 (return true)。
-            // 没写完的数据依靠 Epoll 下一次的 EPOLLOUT 事件来继续驱动。
-            // 这保证了单个超大文件的下载不会长时间阻塞线程池中的工作线程（保证公平性）。
-            return true;
-        }
-        // 如果是 ET 模式，不做拦截，继续 while(true) 循环，直到触发 EAGAIN
-    }
+            bytes_have_send += temp;
+            
+            if (bytes_have_send >= bytes_to_send)
+                return GET_REQUEST;
+            
+            if(m_iv_count == 2 && m_iv_idx == 0 && temp >= m_iv[0].iov_len ){
+                int off(temp-m_iv[0].iov_len);
+                m_iv_idx = 1;
+                m_iv[1].iov_len -= off;
+                m_iv[1].iov_base += off;
+            }else{
+                m_iv[m_iv_idx].iov_len -= temp;  
+                m_iv[m_iv_idx].iov_base += temp;   
+            }
+        }     
+        return NO_REQUEST;
 }
 
 

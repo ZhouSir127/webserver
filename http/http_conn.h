@@ -35,17 +35,16 @@
 #include <utility>   
 #include <cstdio>  
 
-//#include "MAVSDK/cpp/src/mavsdk/core/include/mavsdk/mavsdk.hpp"
-// #include "MAVSDK/cpp/src/mavsdk/core/include/mavsdk/system.hpp"
-// #include "MAVSDK/cpp/src/mavsdk/plugins/action/include/plugins/action/action.hpp"
-// #include "MAVSDK/cpp/src/mavsdk/plugins/telemetry/include/plugins/telemetry/telemetry.hpp"
-// #include "MAVSDK/cpp/src/mavsdk/plugins/mission/include/plugins/mission/mission.hpp"
+#include <mavsdk/mavsdk.h>
+#include <mavsdk/system.h>
+#include <mavsdk/plugins/action/action.h>
+#include <mavsdk/plugins/telemetry/telemetry.h>
 
-// 仅仅是声明，使用 extern
-// extern mavsdk::Mavsdk mavsdk;
-// extern std::shared_ptr<mavsdk::System> drone;
-// extern std::shared_ptr<mavsdk::Action> action;
-// extern std::shared_ptr<mavsdk::Telemetry> telemetry;
+extern mavsdk::Mavsdk mavsdk;
+extern std::shared_ptr<mavsdk::System> drone;
+extern std::shared_ptr<mavsdk::Action> action;
+extern std::shared_ptr<mavsdk::Telemetry> telemetry;
+
 enum METHOD
 {
     GET = 0,
@@ -69,11 +68,10 @@ enum HTTP_CODE
     NO_REQUEST = 0 ,
     GET_REQUEST,
     BAD_REQUEST,
-
     NO_RESOURCE,    
     FORBIDDEN_REQUEST,
     FILE_REQUEST,
-    CLOSED_CONNECTION,
+    CLOSED_CONNECTION
 };
 
 class User{
@@ -174,20 +172,22 @@ private:
     
     struct iovec m_iv[2];
     int m_iv_count;
+    int m_iv_idx;
 
     char* m_file_address; // 专门用来记录 mmap 的原地址
     size_t m_file_size;   // 专门记录文件大小
+
 public:
     http_conn(bool connectET,int sockfd,connection_pool&m_connPool,User&m_users)
     :connectET(connectET),m_sockfd(sockfd),m_connPool(m_connPool),m_users(m_users),
     m_read_idx(0),m_checked_idx(0),m_start_idx(0),
     m_check_state(CHECK_STATE_REQUESTLINE),m_method(GET),m_linger(false),m_content_length(0),
-    bytes_to_send(0),bytes_have_send(0),m_iv_count(1),m_file_address(nullptr),m_file_size(0)
+    bytes_to_send(0),bytes_have_send(0),m_iv_count(1),m_iv_idx(0),m_file_address(nullptr),m_file_size(0)
     {}
 
-    bool init();
+    void init();
     HTTP_CODE process();
-    bool write();
+    HTTP_CODE write();
     bool getLinger() const { return m_linger;}
 };
 
@@ -204,54 +204,37 @@ connection_pool connPool;
 User m_users;
 
 public:
-    HTTP(bool connectET,const string& User, const string& passWord, const string& databaseName, int sql_num)
+    HTTP(bool connectET,const std::string& User, const std::string& passWord, const std::string& databaseName, int sql_num)
     :connectET(connectET),
     users(1+MAX_FD),
     connPool("localhost",3306,User,passWord,databaseName,sql_num),
     m_users(connPool)
     {}
     
-    bool add_http(int sock){
-        if(sock>MAX_FD||users[sock])
-            return false;
+    void add_http(int sock){
         users[sock]=make_unique<http_conn>(connectET,sock,connPool,m_users);
-        return true;
     }    
     //关闭连接，关闭一个连接，客户总量减一
-    bool close_conn(int sockfd)
-    {
-        if(sockfd>MAX_FD||users[sockfd]==nullptr )
-            return false;
-        
+    void close_conn(int sockfd){
         users[sockfd].reset();
-        
-        return true;
     }
 
     HTTP_CODE process(int fd){
         return users[fd]->process();
     } 
 
-    bool write(int fd){
-        if(fd>MAX_FD||users[fd]==nullptr )
-            return false;
-        
+    HTTP_CODE write(int fd){
         return users[fd]->write();
     }
 
     bool isLinger(int fd){
-        if(fd>MAX_FD||users[fd]==nullptr )
-            return false;
-
         return users[fd]->getLinger();
     }
 
-    bool init(int fd){
-        if(fd>MAX_FD||users[fd]==nullptr )
-            return false;
-        return users[fd]->init();
+    void init(int fd){
+        users[fd]->init();
     }
 };
 
 
-#endif
+#endif 

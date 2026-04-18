@@ -4,16 +4,16 @@ WebServer::WebServer(int port,
                 bool listenET,bool connectET,  
                 char* user, char* passWord, char* databaseName, int sql_num, 
                 int thread_num,
-                int log_write,int close_log
+                bool close_log
                 )
 :m_port(port),
 listenET(listenET),connectET(connectET),
 epoll(listenET,connectET),
 http(connectET,user, passWord, databaseName,sql_num),
 m_pool (epoll,utils,http,thread_num),
-m_log_write(log_write),m_close_log(close_log)
+m_close_log(close_log)
 {
-     if (0 == m_close_log)
+    if (0 == m_close_log)
     {
         //初始化日志
         if (1 == m_log_write)
