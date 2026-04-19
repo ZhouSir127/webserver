@@ -8,7 +8,7 @@ int main(int argc, char *argv[])
             webserver::LISTENET,webserver::CONNECTET,
             mysql::IP,mysql::PORT,mysql::USER,mysql::PASSWORD,mysql::NAME,mysql::NUM,http::ROOT,
             threadPool::NUM, threadPool::MAX_REQUEST,
-            log::FILE,log::CLOSE        
+            sysLog::FILE,sysLog::CLOSE        
         );
     
     //监听

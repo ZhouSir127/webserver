@@ -1,0 +1,138 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-c",
+      "-std=c++26",
+      "-Wall",
+      "-I/usr/include/mavsdk",
+      "-g",
+      "-pthread",
+      "-o",
+      "server",
+      "main.cpp"
+    ],
+    "directory": "/root/webserver",
+    "file": "/root/webserver/main.cpp",
+    "output": "/root/webserver/server"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-c",
+      "-std=c++26",
+      "-Wall",
+      "-I/usr/include/mavsdk",
+      "-g",
+      "-pthread",
+      "-o",
+      "server",
+      "webserver.cpp"
+    ],
+    "directory": "/root/webserver",
+    "file": "/root/webserver/webserver.cpp",
+    "output": "/root/webserver/server"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-c",
+      "-std=c++26",
+      "-Wall",
+      "-I/usr/include/mavsdk",
+      "-g",
+      "-pthread",
+      "-o",
+      "server",
+      "http_conn/http_conn.cpp"
+    ],
+    "directory": "/root/webserver",
+    "file": "/root/webserver/http_conn/http_conn.cpp",
+    "output": "/root/webserver/server"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-c",
+      "-std=c++26",
+      "-Wall",
+      "-I/usr/include/mavsdk",
+      "-g",
+      "-pthread",
+      "-o",
+      "server",
+      "thread_pool/thread_pool.cpp"
+    ],
+    "directory": "/root/webserver",
+    "file": "/root/webserver/thread_pool/thread_pool.cpp",
+    "output": "/root/webserver/server"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-c",
+      "-std=c++26",
+      "-Wall",
+      "-I/usr/include/mavsdk",
+      "-g",
+      "-pthread",
+      "-o",
+      "server",
+      "timer_manager/timer_manager.cpp"
+    ],
+    "directory": "/root/webserver",
+    "file": "/root/webserver/timer_manager/timer_manager.cpp",
+    "output": "/root/webserver/server"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-c",
+      "-std=c++26",
+      "-Wall",
+      "-I/usr/include/mavsdk",
+      "-g",
+      "-pthread",
+      "-o",
+      "server",
+      "epoll_manager/epoll_manager.cpp"
+    ],
+    "directory": "/root/webserver",
+    "file": "/root/webserver/epoll_manager/epoll_manager.cpp",
+    "output": "/root/webserver/server"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-c",
+      "-std=c++26",
+      "-Wall",
+      "-I/usr/include/mavsdk",
+      "-g",
+      "-pthread",
+      "-o",
+      "server",
+      "log/log.cpp"
+    ],
+    "directory": "/root/webserver",
+    "file": "/root/webserver/log/log.cpp",
+    "output": "/root/webserver/server"
+  },
+  {
+    "arguments": [
+      "/usr/bin/g++",
+      "-c",
+      "-std=c++26",
+      "-Wall",
+      "-I/usr/include/mavsdk",
+      "-g",
+      "-pthread",
+      "-o",
+      "server",
+      "CGImysql/sql_connection_pool.cpp"
+    ],
+    "directory": "/root/webserver",
+    "file": "/root/webserver/CGImysql/sql_connection_pool.cpp",
+    "output": "/root/webserver/server"
+  }
+]

@@ -2,7 +2,6 @@
 #define LOG_H
 
 #include <cstdio>
-#include <cstdarg>
 #include <string>
 #include <mutex>
 #include <sys/time.h>

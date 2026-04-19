@@ -3,8 +3,11 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}",
-                "${workspaceFolder}/mavlink/v2.0"
+                "${workspaceFolder}/**",
+                "/usr/include",
+                "/usr/include/mavsdk",
+                "/usr/include/mavsdk/plugins",
+                "/usr/include/mavsdk/plugins/action"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++",

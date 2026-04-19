@@ -1,5 +1,5 @@
 #include "webserver.h"
-
+#include "epoll_manager/epoll_manager.h"
 
 WebServer::WebServer(int port,
                 bool listenET,bool connectET,  
@@ -8,55 +8,55 @@ WebServer::WebServer(int port,
                 int thread_num,int max_request,
                 const std::string& file_name,bool close_log 
             )
-:m_port(port),
-listenET(listenET),
-epoll(listenET,connectET),
-utils(lifeSpan,timeSlot),
+:port(port),
+isListenEt(listenET),
+epollManager(listenET,connectET),
+timerManager(lifeSpan,timeSlot),
 http(connectET, IP, sqlport,user, passWord, databaseName,sql_num,root),
-m_pool (epoll,utils,http,thread_num,max_request)
+threadPool(epollManager,timerManager,http,thread_num,max_request)
 {
     Log::init(file_name,close_log);
 }
 
 WebServer::~WebServer()
 {
-    close(m_listenfd);
+    close(listenFd);
 }
 
 void WebServer::eventListen()
 {
     //网络编程基础步骤
-    m_listenfd = socket(PF_INET, SOCK_STREAM, 0);
-    assert(m_listenfd >= 0);
+    listenFd = socket(PF_INET, SOCK_STREAM, 0);
+    assert(listenFd >= 0);
     
     int flag = 1;
-    setsockopt(m_listenfd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
+    setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
 
     //优雅关闭连接
     struct linger tmp = {1, 1};
-    setsockopt(m_listenfd, SOL_SOCKET, SO_LINGER, &tmp, sizeof(tmp));
+    setsockopt(listenFd, SOL_SOCKET, SO_LINGER, &tmp, sizeof(tmp));
 
     //绑定地址结构
     struct sockaddr_in address;
     bzero(&address, sizeof(address));
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_ANY);
-    address.sin_port = htons(m_port);
+    address.sin_port = htons(port);
 
-    int ret = bind(m_listenfd, (struct sockaddr *)&address, sizeof(address));
+    int ret = bind(listenFd, (struct sockaddr *)&address, sizeof(address));
     assert(ret >= 0);
     
-    ret = listen(m_listenfd, 5);
+    ret = listen(listenFd, 5);
     assert(ret >= 0);
 }
 
-bool WebServer::dealclientdata()
+bool WebServer::dealClientData()
 {
     struct sockaddr_in client_address;
     socklen_t client_addrlength = sizeof(client_address);
-    if (listenET == false)
+    if (isListenEt == false)
     {
-        int connfd = accept(m_listenfd, (struct sockaddr *)&client_address, &client_addrlength);
+        int connfd = accept(listenFd, (struct sockaddr *)&client_address, &client_addrlength);
         if (connfd < 0)
         {
             LOG_ERROR("%s:errno is:%d", "accept error", errno);
@@ -73,14 +73,14 @@ bool WebServer::dealclientdata()
             return false;
         }
         
-        epoll.addfd(connfd,Epoll::Type::CONNECTION);
-        utils.add_timer(connfd);
-        http.add_http(connfd);
+        epollManager.add(connfd,EpollManager::FdType::CONNECTION);
+        timerManager.add(connfd);
+        http.add(connfd);
     }
     else
         while (1)
         {
-            int connfd = accept(m_listenfd, (struct sockaddr *)&client_address, &client_addrlength);
+            int connfd = accept(listenFd, (struct sockaddr *)&client_address, &client_addrlength);
             if (connfd < 0)
                 break;
             if ( connfd > consts::MAX_FD)
@@ -93,23 +93,23 @@ bool WebServer::dealclientdata()
                 LOG_ERROR("%s", "Internal server busy");
                 return false;
             }
-            epoll.addfd(connfd,Epoll::Type::CONNECTION);
-            utils.add_timer(connfd);
-            http.add_http(connfd);
+            epollManager.add(connfd,EpollManager::FdType::CONNECTION);
+            timerManager.add(connfd);
+            http.add(connfd);
         }
     return true;
 }
 
 void WebServer::eventLoop()
 {
-    epoll.addfd(m_listenfd,Epoll::Type::LISTEN);
-    epoll.addfd(utils.getPipefd0(), Epoll::Type::PIPE);
+    epollManager.add(listenFd,EpollManager::FdType::LISTEN);
+    epollManager.add(timerManager.getPipefd0(), EpollManager::FdType::PIPE);
 
     bool timeout = false;
     bool stop_server = false;
     
     do{
-        int number = epoll.wait();
+        int number = epollManager.wait();
         if (number < 0 ){
             if(errno != EINTR)
             {
@@ -120,37 +120,37 @@ void WebServer::eventLoop()
         }
 
         for (int i = 0; i < number ; i++){
-            const epoll_event&event=epoll.getEvent(i);
+            const epoll_event&event=epollManager.getEvent(i);
 
-            if (event.data.fd == m_listenfd){
+            if (event.data.fd == listenFd){
                 if (event.events & EPOLLIN)
-                    dealclientdata();
+                    dealClientData();
                 else
                     LOG_ERROR("%s", "epoll failure");
-            }else if ( event.data.fd == utils.getPipefd0() ){
+            }else if ( event.data.fd == timerManager.getPipefd0() ){
                 if(event.events & EPOLLIN ){
-                    if(false == utils.dealwithsignal(timeout,stop_server) )
+                    if(false == timerManager.dealWithSignal(timeout,stop_server) )
                         LOG_ERROR("%s", "dealclientdata failure");
                 }else
                     LOG_ERROR("%s", "epoll failure");
             }else if(event.events & EPOLLIN)
-                m_pool.append(event.data.fd, false);
-            else if(event.events && EPOLLOUT)
-                m_pool.append(event.data.fd, true);
+                threadPool.append(event.data.fd, false);
+            else if(event.events & EPOLLOUT)
+                threadPool.append(event.data.fd, true);
             else{    
-                epoll.removefd(event.data.fd);
-                utils.del_timer(event.data.fd);
-                http.close_conn(event.data.fd);
+                epollManager.remove(event.data.fd);
+                timerManager.remove(event.data.fd);
+                http.remove(event.data.fd);
                 close(event.data.fd);
             }
         }
         
         if (timeout){
-            utils.timer_handler();
+            timerManager.timerHandler();
             
-            for(int fd : utils.getDeath() ){
-                epoll.removefd(fd);
-                http.close_conn(fd);
+            for(int fd : timerManager.getDeath() ){
+                epollManager.remove(fd);
+                http.remove(fd);
                 close(fd);
 
                 LOG_INFO("close fd %d", fd);

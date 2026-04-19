@@ -1,3 +1,6 @@
+#ifndef CONSTS_H
+#define CONSTS_H
+
 namespace consts{
     const int MAX_FD = 65536;       
     const int FILENAME_LEN = 200;
@@ -5,3 +8,5 @@ namespace consts{
     const int WRITE_BUFFER_SIZE = 1024;
     const int MAX_EVENT_NUMBER = 10000; 
 };
+
+#endif

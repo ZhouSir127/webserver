@@ -1,5 +1,5 @@
 #include "log.h"
-
+# include <stdarg.h>
 // 【极其重要】：静态成员变量必须在 .cpp 文件中进行定义和初始化！
 FILE* Log::s_fp = nullptr;
 std::mutex Log::s_mutex;

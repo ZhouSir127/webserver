@@ -1,13 +1,10 @@
 #include "sql_connection_pool.h"
-#include "../log/log.h"
 #include <mysql/mysql.h>
 #include <stdio.h>
 #include <string>
 #include <string.h>
 #include <stdlib.h>
-#include <list>
 #include <pthread.h>
-#include <iostream>
 
 connection_pool::connection_pool(const std::string& url, int Port,const std::string& User, const std::string& PassWord, const std::string& DBName, int MaxConn)
 {
@@ -39,7 +36,7 @@ MYSQL *connection_pool::GetConnection()
 {
 	sem_wait(&reserve);
 	
-	unique_lock<std::mutex>Lock(lock);
+	std::unique_lock<std::mutex>Lock(lock);
 
 	MYSQL *con = connList.front();
 	connList.pop_front();
@@ -53,7 +50,7 @@ bool connection_pool::ReleaseConnection(MYSQL *con)
 	if (!con)
 		return false;
 
-	unique_lock<std::mutex>Lock(lock);
+	std::unique_lock<std::mutex>Lock(lock);
 	connList.push_back(con);
 
 	sem_post(&reserve);
@@ -70,7 +67,7 @@ connection_pool::~connection_pool()
 {
 	sem_destroy(&reserve);
 
-	unique_lock<std::mutex>Lock(lock);
+	std::unique_lock<std::mutex>Lock(lock);
 
 	for (std::deque <MYSQL *>::iterator it = connList.begin(); it != connList.end(); ++it)
 		mysql_close(*it);

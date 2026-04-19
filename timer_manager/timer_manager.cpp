@@ -5,7 +5,7 @@
 #include <sys/types.h>
 
 
-void SortedTimerList::addTimer(int sock)
+void SortedTimerList::add(int sock)
 {
     std::shared_ptr<TimerNode> timer = std::make_shared<TimerNode> (time(nullptr)+lifeSpan,sock);
 
@@ -21,7 +21,7 @@ void SortedTimerList::addTimer(int sock)
     usersTimer[sock]=timer;
 }
 
-void SortedTimerList::adjustTimer(int sock){
+void SortedTimerList::adjust(int sock){
     
     std::shared_ptr<TimerNode>&timer = usersTimer[sock];
     timer->expire=time(nullptr)+lifeSpan;
@@ -46,7 +46,7 @@ void SortedTimerList::adjustTimer(int sock){
     
 }
 
-void SortedTimerList::delTimer(int sock)
+void SortedTimerList::remove(int sock)
 {    
     std::shared_ptr<TimerNode> &timer = usersTimer[sock];
 

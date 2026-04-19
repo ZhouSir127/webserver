@@ -29,7 +29,7 @@ namespace threadPool{
     const int MAX_REQUEST = 10000;
 };
 
-namespace log{
+namespace sysLog{
     const std::string FILE = "/var/log/webserver";
     const bool CLOSE = false;
 }

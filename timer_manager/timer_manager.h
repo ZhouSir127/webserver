@@ -58,9 +58,9 @@ public:
         tail->prev=head;
     }
     
-    void addTimer(int sock);
-    void adjustTimer(int sock);
-    void delTimer(int sock);
+    void add(int sock);
+    void adjust(int sock);
+    void remove(int sock);
     void tick();
     const std::vector<int>& getDeath() const { return death; }
     
@@ -122,9 +122,9 @@ public:
     }
     int getPipefd1() const { return SignalHandler::getPipefd1(); }
     int getPipefd0() const { return SignalHandler::getPipefd0(); }
-    void addTimer(int sock) { timerList.addTimer(sock); }
-    void adjustTimer(int sock) { timerList.adjustTimer(sock); }
-    void delTimer(int sock) { timerList.delTimer(sock); }
+    void add(int sock) { timerList.add(sock); }
+    void adjust(int sock) { timerList.adjust(sock); }
+    void remove(int sock) { timerList.remove(sock); }
     bool dealWithSignal(bool &timeout, bool &stop_server) { return SignalHandler::dealWithSignal(timeout, stop_server); }
     const std::vector<int>& getDeath() const { return timerList.getDeath(); }
 
