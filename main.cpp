@@ -1,7 +1,7 @@
 #include "config.h"
 #include "webserver.h"
 
-int main(int argc, char *argv[])
+int main()
 {
     WebServer server(webserver::PORT,
             timer::LIFE_SPAN,timer::TIMESLOT,
