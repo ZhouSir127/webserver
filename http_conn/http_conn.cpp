@@ -163,7 +163,7 @@ HttpCode HttpConn::parseRequestLine()
     if(!(iss >> token) )
         return HttpCode::BAD_REQUEST;
 
-    if (token.compare(pos , 0 ,"HTTP/1.1") != 0)
+    if (token != "HTTP/1.1" && token != "HTTP/1.0")
         return HttpCode::BAD_REQUEST;    
 
     checkState = CheckState::CHECK_STATE_HEADER;
@@ -350,6 +350,8 @@ HttpCode HttpConn::doRequest()
                 case 's': // /16 -> state
                     if (telemetry) telemetry->health();
                     break;
+                default:  // 👈 加上这行，防止未知路由请求导致异常
+                    return HttpCode::NO_RESOURCE;
             }
     }
     if(!realFilePath.empty() ){
