@@ -42,6 +42,7 @@ void ThreadPool::run()
                 case HttpCode::NO_REQUEST://继续读
                     epollManager.modify(fd,EPOLLIN);
                     timerManager.adjust(fd);
+                    break;
                 default:    //准备发送响应
                     epollManager.modify(fd,::EPOLLOUT);
                     timerManager.adjust(fd);

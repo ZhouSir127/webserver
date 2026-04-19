@@ -14,13 +14,13 @@ std::shared_ptr<mavsdk::System> drone = nullptr;
 std::shared_ptr<mavsdk::Action> action = nullptr;
 std::shared_ptr<mavsdk::Telemetry> telemetry = nullptr;
 
-std::unordered_map<int,std::string> form {
+std::unordered_map<int,std::string> HttpConn::form {
     {400,"Your request has bad syntax or is inherently impossible to staisfy.\n"}, 
     {403,"You do not have permission to get file form this server.\n"},
     {404,"The requested file was not found on this server.\n"},
     //{500,"There was an unusual problem serving the request file.\n"}
 };    
-std::unordered_map<int,std::string> title {
+std::unordered_map<int,std::string> HttpConn::title {
     {200,"OK"},
     {400,"Bad Request"}, 
     {403,"Forbidden"},
@@ -189,8 +189,6 @@ HttpCode HttpConn::parseHeaders()
             return HttpCode::BAD_REQUEST;
 
         contentLength = std::stoul(std::string(line.begin()+pos , line.end() ) );
-        if ( contentLength < 0 ) 
-            return HttpCode::BAD_REQUEST;
     }
 
     return HttpCode::GET_REQUEST;
@@ -382,7 +380,7 @@ HttpCode HttpConn::write()
             if (bytesHaveSent >= bytesToSend)
                 return HttpCode::GET_REQUEST;
             
-            if(ioVectorCount == 2 && ioVectorIdx == 0 && temp >= ioVectors[0].iov_len ){
+            if(ioVectorCount == 2 && ioVectorIdx == 0 && static_cast<size_t>(temp) >= ioVectors[0].iov_len ){
                 int off(temp-ioVectors[0].iov_len);
                 ioVectorIdx = 1;
                 ioVectors[1].iov_len -= off;
@@ -408,7 +406,7 @@ HttpCode HttpConn::write()
             if (bytesHaveSent >= bytesToSend)
                 return HttpCode::GET_REQUEST;
             
-            if(ioVectorCount == 2 && ioVectorIdx == 0 && temp >= ioVectors[0].iov_len ){
+            if(ioVectorCount == 2 && ioVectorIdx == 0 && static_cast<size_t>(temp) >= ioVectors[0].iov_len ){
                 int off(temp-ioVectors[0].iov_len);
                 ioVectorIdx = 1;
                 ioVectors[1].iov_len -= off;

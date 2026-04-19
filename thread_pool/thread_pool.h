@@ -47,7 +47,7 @@ private:
     Http&http;
 
     int threadNumber;        //线程池中的线程数
-    int maxRequest;
+    size_t maxRequest;
     std::vector<std::thread> threads;       //描述线程池的数组，其大小为m_thread_number
     std::queue<std::pair<int,bool> > workQueue; //请求队列
     std::mutex queueLocker;       //保护请求队列的互斥锁
