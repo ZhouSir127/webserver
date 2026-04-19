@@ -11,22 +11,20 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <sys/stat.h>
-#include <string.h>
 #include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
+
 #include <sys/mman.h>
 #include <stdarg.h>
-#include <errno.h>
+
 #include <sys/wait.h>
 #include <sys/uio.h>
 
 #include <time.h>
-#include "../log/log.h"
 #include "../consts.h"
 
 #include <vector>
 #include <memory>
+#include <mutex>
 
 class SortedTimerList
 {
@@ -44,8 +42,8 @@ private:
         std::weak_ptr<TimerNode>next;
     };
 
+    std::mutex lock;
     time_t lifeSpan;
-
     std::shared_ptr<TimerNode> head;
     std::shared_ptr<TimerNode> tail;
     std::vector<std::shared_ptr<TimerNode> > usersTimer;    

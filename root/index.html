@@ -2,210 +2,85 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MAVSDK 飞控控制面板</title>
+    <title>无人机飞行控制台 MAVSDK</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: "Microsoft YaHei", sans-serif;
-        }
-        body {
-            background: #f5f7fa;
-            padding: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .header h1 {
-            font-size: 24px;
-            color: #2c3e50;
-            margin-bottom: 8px;
-        }
-        .header p {
-            color: #7f8c8d;
-            font-size: 14px;
-        }
-        .container {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-        }
-        .card h2 {
-            font-size: 16px;
-            color: #34495e;
-            margin-bottom: 15px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #eee;
-        }
-        .btn-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-        button {
-            padding: 10px;
-            border: none;
-            border-radius: 6px;
-            background: #3498db;
-            color: white;
-            font-size: 13px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        button:hover {
-            background: #2980b9;
-        }
-        button.danger {
-            background: #e74c3c;
-        }
-        button.danger:hover {
-            background: #c0392b;
-        }
-        button.success {
-            background: #2ecc71;
-        }
-        button.success:hover {
-            background: #27ae60;
-        }
-        button.warning {
-            background: #f39c12;
-        }
-        button.warning:hover {
-            background: #e67e22;
-        }
-        .log-box {
-            background: #fff;
-            border-radius: 12px;
-            padding: 20px;
-            height: 200px;
-            overflow-y: auto;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-        }
-        .log-box h2 {
-            font-size: 16px;
-            margin-bottom: 10px;
-            color: #34495e;
-        }
-        .log {
-            font-size: 12px;
-            color: #2c3e50;
-            line-height: 1.5;
-            margin-bottom: 5px;
-        }
-        .url {
-            color: #3498db;
-            font-weight: bold;
-        }
+        body { font-family: Arial, sans-serif; background: #1a1a2e; color: #e9e9eb; padding: 20px; text-align: center; margin: 0; }
+        h1 { color: #00d2ff; text-shadow: 0 0 10px rgba(0, 210, 255, 0.5); }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; max-width: 900px; margin: 30px auto; }
+        .btn { padding: 15px; font-size: 15px; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .btn:active { transform: translateY(2px); box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        
+        .btn-conn { background: #0f3460; color: white; border: 1px solid #16213e; }
+        .btn-conn:hover { background: #1a5b92; }
+        
+        .btn-action { background: #e94560; color: white; }
+        .btn-action:hover { background: #ff5c77; }
+        
+        .btn-move { background: #0081a7; color: white; }
+        .btn-move:hover { background: #00afda; }
+        
+        .btn-info { background: #4caf50; color: white; }
+        .btn-info:hover { background: #66bb6a; }
+
+        #log-screen { background: #000; color: #0f0; border: 2px solid #333; border-radius: 8px; height: 200px; overflow-y: auto; padding: 15px; text-align: left; max-width: 900px; margin: 20px auto; font-family: 'Courier New', monospace; box-shadow: inset 0 0 10px rgba(0,255,0,0.1);}
+        .log-time { color: #888; margin-right: 10px; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>MAVSDK 通用飞控控制面板</h1>
-        <p>接口URL：接口名() → /接口名 | 纯静态页面 | 适配TinyWebServer</p>
+    <h1>🛸 地面指挥中心 (Ground Control Station)</h1>
+    
+    <div class="grid">
+        <button class="btn btn-conn" onclick="sendCommand('c', '连接飞控')">🔗 尝试连接飞控 (c)</button>
+        <button class="btn btn-conn" onclick="sendCommand('d', '断开连接')">🔌 断开飞控 (d)</button>
+        <button class="btn btn-conn" onclick="sendCommand('C', '查询连接状态')">📡 连接状态 (C)</button>
+        
+        <button class="btn btn-action" onclick="sendCommand('a', '解锁 (Arm)')">🔥 解锁螺旋桨 (a)</button>
+        <button class="btn btn-action" onclick="sendCommand('D', '上锁 (Disarm)')">🛑 强制上锁 (D)</button>
+        <button class="btn btn-move" onclick="sendCommand('m', '切换悬停模式 (Hold)')">⏸️ 悬停模式 (m)</button>
+        
+        <button class="btn btn-move" onclick="sendCommand('t', '起飞 (Takeoff)')">🛫 自动起飞 (t)</button>
+        <button class="btn btn-move" onclick="sendCommand('l', '降落 (Land)')">🛬 自动降落 (l)</button>
+        <button class="btn btn-move" onclick="sendCommand('R', '返航 (RTL)')">🏠 自动返航 (R)</button>
+        <button class="btn btn-move" onclick="sendCommand('g', '飞行至目标 (Goto)')">📍 目标飞行 (g)</button>
+        
+        <button class="btn btn-info" onclick="sendCommand('p', '获取位置 (Position)')">🌍 经纬度位置 (p)</button>
+        <button class="btn btn-info" onclick="sendCommand('v', '获取速度 (Velocity)')">🚀 飞行速度 (v)</button>
+        <button class="btn btn-info" onclick="sendCommand('A', '获取姿态 (Attitude)')">✈️ 欧拉角姿态 (A)</button>
+        <button class="btn btn-info" onclick="sendCommand('b', '获取电量 (Battery)')">🔋 电池状态 (b)</button>
+        <button class="btn btn-info" onclick="sendCommand('G', '获取 GPS 状态')">🛰️ GPS 信号 (G)</button>
+        <button class="btn btn-info" onclick="sendCommand('s', '获取健康状态')">❤️ 系统健康 (s)</button>
     </div>
 
-    <div class="container">
-        <!-- 连接控制 -->
-        <div class="card">
-            <h2>🔗 连接控制</h2>
-            <div class="btn-group">
-                <button onclick="send('/connect')">connect</button>
-                <button onclick="send('/disconnect')" class="danger">disconnect</button>
-                <button onclick="send('/connstatus')">连接状态</button>
-            </div>
-        </div>
-
-        <!-- 解锁上锁 -->
-        <div class="card">
-            <h2>⚙️ 解锁/上锁</h2>
-            <div class="btn-group">
-                <button onclick="send('/arm')" class="success">arm</button>
-                <button onclick="send('/disarm')" class="danger">disarm</button>
-                <button onclick="send('/mode')">set_flight_mode</button>
-            </div>
-        </div>
-
-        <!-- 飞行控制 -->
-        <div class="card">
-            <h2>✈️ 飞行控制</h2>
-            <div class="btn-group">
-                <button onclick="send('/takeoff')" class="success">takeoff</button>
-                <button onclick="send('/land')" class="warning">land</button>
-                <button onclick="send('/rtl')" class="warning">return_to_launch</button>
-                <button onclick="send('/goto')">goto_location</button>
-            </div>
-        </div>
-
-        <!-- 状态查询 -->
-        <div class="card">
-            <h2>📊 状态查询</h2>
-            <div class="btn-group">
-                <button onclick="send('/position')">position</button>
-                <button onclick="send('/velocity')">velocity</button>
-                <button onclick="send('/attitude')">attitude</button>
-                <button onclick="send('/battery')">battery</button>
-                <button onclick="send('/gps')">gps_info</button>
-                <button onclick="send('/state')">flight_state</button>
-            </div>
-        </div>
-
-        <!-- 任务管理 -->
-        <div class="card">
-            <h2>📋 任务管理</h2>
-            <div class="btn-group">
-                <button onclick="send('/upload')">upload_mission</button>
-                <button onclick="send('/start')">start_mission</button>
-                <button onclick="send('/pause')">pause_mission</button>
-                <button onclick="send('/clear')" class="danger">clear_mission</button>
-                <button onclick="send('/progress')">mission_progress</button>
-            </div>
-        </div>
-
-        <!-- 传感器参数 -->
-        <div class="card">
-            <h2>📡 传感器/参数</h2>
-            <div class="btn-group">
-                <button onclick="send('/getparam')">get_parameter</button>
-                <button onclick="send('/setparam')">set_parameter</button>
-                <button onclick="send('/imu')">imu_raw</button>
-                <button onclick="send('/mag')">magnetometer</button>
-                <button onclick="send('/baro')">barometer</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 请求日志 -->
-    <div class="log-box">
-        <h2>📝 请求日志</h2>
-        <div id="log"></div>
+    <div id="log-screen">
+        <div><span class="log-time">[System]</span> 欢迎进入指挥中心，飞行前请先点击"尝试连接飞控"</div>
     </div>
 
     <script>
-        // 发送GET请求并记录日志
-        function send(url) {
-            const log = document.getElementById('log');
-            const time = new Date().toLocaleTimeString();
-            const logItem = document.createElement('div');
-            logItem.className = 'log';
-            logItem.innerHTML = `[${time}] 发送请求 → <span class="url">${url}</span>`;
-            log.prepend(logItem);
+        function sendCommand(cmdChar, actionName) {
+            logMsg(`>>> 发送指令: [/${cmdChar}] ${actionName}`);
+            
+            // 使用 GET 请求调用你的对应路由字母
+            fetch(`/${cmdChar}`, { method: 'GET' })
+                .then(response => {
+                    if (response.ok) {
+                        logMsg(`<<< 指令已送达`);
+                    } else {
+                        logMsg(`[错误] 请求被拒绝, 状态码: ${response.status}`, true);
+                    }
+                })
+                .catch(err => {
+                    logMsg(`[错误] 服务器无响应或网络断开`, true);
+                });
+        }
 
-            // 发送HTTP请求
-            fetch(url)
-                .then(res => res.text())
-                .catch(err => console.log('请求发送完成'));
+        function logMsg(msg, isError = false) {
+            const screen = document.getElementById('log-screen');
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+            
+            const colorBlock = isError ? 'style="color: red;"' : '';
+            screen.innerHTML += `<div ${colorBlock}><span class="log-time">[${timeStr}]</span> ${msg}</div>`;
+            screen.scrollTop = screen.scrollHeight; // 自动滚到底部
         }
     </script>
 </body>

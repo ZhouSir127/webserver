@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include "../log/log.h"
 
 connection_pool::connection_pool(const std::string& url, int Port,const std::string& User, const std::string& PassWord, const std::string& DBName, int MaxConn)
 {
@@ -16,7 +17,7 @@ connection_pool::connection_pool(const std::string& url, int Port,const std::str
 
 		if (con == NULL)
 		{
-		//	LOG_ERROR("MySQL Error");
+			LOG_ERROR("MySQL Error: mysql_init failed");
 			exit(1);
 		}
 
@@ -24,11 +25,12 @@ connection_pool::connection_pool(const std::string& url, int Port,const std::str
 
 		if (con == NULL)
 		{
-		//	LOG_ERROR("MySQL Error");
+			LOG_ERROR("MySQL Error: mysql_real_connect failed for User: %s", User.c_str());
 			exit(1);
 		}
 		connList.push_back(con);
 	}
+	LOG_INFO("MySQL Connection Pool initialized successfully with %d connections", MaxConn);
 }
 
 //当有请求时，从数据库连接池中返回一个可用连接，更新使用和空闲连接数

@@ -185,6 +185,12 @@ public:
     root(root),
     bytesToSend(0),bytesHaveSent(0),ioVectorCount(1),ioVectorIdx(0),fileAddress(nullptr),fileSize(0)
     {}
+    ~HttpConn(){
+        if (fileAddress) {
+            munmap(fileAddress, fileSize);
+            fileAddress = nullptr;
+        }
+    }
 
     void init();
     HttpCode process();

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>注册账号</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #2c3e50; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .box { background: #ecf0f1; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 300px; text-align: center; }
+        input { width: 90%; padding: 10px; margin: 10px 0; border: 1px solid #bdc3c7; border-radius: 4px; box-sizing: border-box;}
+        button { width: 100%; padding: 10px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px;}
+        button:hover { background: #2ecc71; }
+        a { text-decoration: none; color: #2980b9; font-size: 14px; display: inline-block; margin-top: 15px;}
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>注册新操作员</h2>
+        <form id="regForm" action="/r" method="post">
+            <input type="text" name="user" placeholder="设定用户名" required>
+            <input type="password" name="password" placeholder="设定密码" required>
+            <button type="button" onclick="submitReg()">立即注册</button>
+        </form>
+        <a href="/">返回登录页</a>
+    </div>
+
+    <script>
+        function submitReg() {
+            const form = document.getElementById('regForm');
+            const user = form.user.value;
+            const pass = form.password.value;
+            if(!user || !pass) return alert('请输入账号和密码');
+
+            fetch('/r', {
+                method: 'POST',
+                body: user + " " + pass
+            }).then(res => {
+                if(res.redirected) window.location.href = res.url;
+                else document.write(res.text());
+            });
+        }
+    </script>
+</body>
+</html>

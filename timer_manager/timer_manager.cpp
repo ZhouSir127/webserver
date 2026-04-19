@@ -3,10 +3,13 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/types.h>
-
+#include <cstring>
+#include "../log/log.h"
 
 void SortedTimerList::add(int sock)
 {
+    std::unique_lock<std::mutex>Lock(lock);
+
     std::shared_ptr<TimerNode> timer = std::make_shared<TimerNode> (time(nullptr)+lifeSpan,sock);
 
     timer->next=tail;
@@ -22,7 +25,8 @@ void SortedTimerList::add(int sock)
 }
 
 void SortedTimerList::adjust(int sock){
-    
+    std::unique_lock<std::mutex>Lock(lock);
+
     std::shared_ptr<TimerNode>&timer = usersTimer[sock];
     timer->expire=time(nullptr)+lifeSpan;
 
@@ -48,6 +52,8 @@ void SortedTimerList::adjust(int sock){
 
 void SortedTimerList::remove(int sock)
 {    
+    std::unique_lock<std::mutex>Lock(lock);
+
     std::shared_ptr<TimerNode> &timer = usersTimer[sock];
 
     std::shared_ptr<TimerNode> next = timer -> next.lock();
@@ -61,6 +67,8 @@ void SortedTimerList::remove(int sock)
 
 void SortedTimerList::tick()
 {
+    std::unique_lock<std::mutex>Lock(lock);
+
     std::shared_ptr<TimerNode> end = head -> next.lock();
     time_t now=time(nullptr);
     
@@ -70,6 +78,7 @@ void SortedTimerList::tick()
         death.push_back(end->sock);
         usersTimer[end->sock].reset();
         end=end->next.lock();
+        LOG_INFO("Connection timeout, fd: %d. Marking for removal.", end->sock);
     }
 
     end->prev = head;

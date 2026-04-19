@@ -20,7 +20,7 @@ namespace mysql{
     const int PORT = 3306;
     const std::string USER = "root" ;
     const std::string PASSWORD = "4399";
-    const std::string NAME = "MySQL";
+    const std::string NAME = "webserver_db";
     const int NUM = 8;
 };
 

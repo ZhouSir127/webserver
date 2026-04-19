@@ -211,7 +211,6 @@ HttpCode HttpConn::processRead()
                 checkedIdx = startIdx + contentLength ;
                 //POST请求中最后为输入的用户名和密码
                 requestBody = std::string(readBuffer.begin() + startIdx ,readBuffer.begin() + checkedIdx);
-                startIdx = checkedIdx = readIdx = 0;
                 
                 return doRequest();
             }
@@ -243,7 +242,7 @@ HttpCode HttpConn::doRequest()
         if( !(iss >> password) )
             return HttpCode::BAD_REQUEST;
     
-        if (url[1] == 0){    //注册
+        if (url[1] == 'r'){    //提交注册
             if (users.exists(name) ==false ){
                 std::string sql_insert = "INSERT INTO user(username, passwd) VALUES('" 
                         + name 
@@ -257,24 +256,31 @@ HttpCode HttpConn::doRequest()
                 if (mysql_query(mysql, sql_insert.data() ) == 0){
                     realFilePath = std::string(root + "/log.html");
                     users.add(name,password);
-                }else
+                    LOG_INFO("User Register Success: %s", name.c_str());
+                }else{
                     realFilePath = std::string(root + "/registerError.html");
-            }else
+                    LOG_ERROR("User Register Failed (DB Error): %s", name.c_str());
+                }
+            }else{
                 realFilePath = std::string(root + "/registerError.html");
-    
-        }else if ( users.check(name,password) )
+                LOG_ERROR("User Register Failed (User Exists): %s", name.c_str());
+            }
+        }else if ( users.check(name,password) ){
             realFilePath = std::string(root + "/index.html");
-        else
-            realFilePath = std::string(root + "/logError.html");    
+            LOG_INFO("User Login Success: %s", name.c_str());
+        }else{
+            realFilePath = std::string(root + "/logError.html");
+            LOG_ERROR("User Login Failed (Wrong password/No user): %s", name.c_str());
+        }
     }else{
         if(url.size() == 1)
             realFilePath = std::string(root + "/log.html" );
         else
             switch (url[1]){
-                case 0:
+                case 'r'://注册页面
                     realFilePath = std::string(root + "/register.html" );
                     break;
-                case 1:
+                case 'c':// /1 -> /connect
                     if (!mavsdkPtr) {
                         mavsdk::Mavsdk::Configuration config(mavsdk::ComponentType::CompanionComputer);
                         mavsdkPtr = std::make_shared<mavsdk::Mavsdk>(config);
@@ -292,67 +298,69 @@ HttpCode HttpConn::doRequest()
                         mavsdkPtr->add_any_connection("udp://:14540");
                     }
                     break;
-                case 2:// /2 -> /disconnect
+                case 'd':// /2 -> /disconnect
                     action = nullptr;
                     telemetry = nullptr;
                     drone = nullptr;
                     LOG_INFO("无人机连接已断开");
                     break;
-                case 3:
+                case 'C':
                     // /3 -> connstatus
                     if (drone) {
                         bool is_conn = drone->is_connected();
                         LOG_INFO("连接状态: %d", is_conn);
                     }
                     break;
-                case 4: // /4 -> arm
+                case 'a': // /4 -> arm
                     if (action) action->arm();
                     break;
-                case 5: // /5 -> disarm
+                case 'D': // /5 -> disarm
                     if (action) action->disarm();
                     break;
-                case 6: // /6 -> mode (切换为 hold 模式演示)
+                case 'm': // /6 -> mode (切换为 hold 模式演示)
                     if (action) action->hold(); 
                     break;
-                case 7: // /7 -> takeoff
+                case 't': // /7 -> takeoff
                     if (action) action->takeoff();
                     break;
-                case 8: // /8 -> land
+                case 'l': // /8 -> land
                     if (action) action->land();
                     break;
-                case 9: // /9 -> rtl
+                case 'R': // /9 -> rtl
                     if (action) action->return_to_launch();
                     break;
-                case 10: // /10 -> goto
+                case 'g': // /10 -> goto
                     // goto 需要额外的经纬度参数，通常前端发 /10?lat=xx&lon=xx，此处预留
                     break;
-                case 11: // /11 -> position
+                case 'p': // /11 -> position
                     if (telemetry) telemetry->position();
                     break;
-                case 12: // /12 -> velocity
+                case 'v': // /12 -> velocity
                     if (telemetry) telemetry->velocity_ned();
                     break;
-                case 13: // /13 -> attitude
+                case 'A': // /13 -> attitude
                     if (telemetry) telemetry->attitude_euler();
                     break;
-                case 14: // /14 -> battery
+                case 'b': // /14 -> battery
                     if (telemetry) telemetry->battery();
                     break;
-                case 15: // /15 -> gps
+                case 'G': // /15 -> gps
                     if (telemetry) telemetry->gps_info();
                     break;
-                case 16: // /16 -> state
+                case 's': // /16 -> state
                     if (telemetry) telemetry->health();
                     break;
             }
     }
     if(!realFilePath.empty() ){
-        if (!std::filesystem::exists(realFilePath)  )
+        if (!std::filesystem::exists(realFilePath)  ){
+            LOG_ERROR("File request Error: NO_RESOURCE (404) for path: %s", realFilePath.c_str());
             return HttpCode::NO_RESOURCE;
-
-        if (access(realFilePath.c_str(), R_OK) != 0  )
+        }
+        if (access(realFilePath.c_str(), R_OK) != 0  ){
+            LOG_ERROR("File request Error: FORBIDDEN_REQUEST (403) for path: %s", realFilePath.c_str());
             return HttpCode::FORBIDDEN_REQUEST;
-
+        }
         if (!std::filesystem::is_regular_file(realFilePath) )
             return HttpCode::BAD_REQUEST;
     
@@ -365,7 +373,7 @@ HttpCode HttpConn::write()
 {
     if(isConnectEt)
         while (true) {
-            ssize_t temp = writev(socketFd, &ioVectors[ioVectorIdx], ioVectorCount);
+            ssize_t temp = writev(socketFd, &ioVectors[ioVectorIdx], ioVectorCount - ioVectorIdx);
 
             if (temp < 0) {
                 // TCP 写缓冲区已满，必须等待 epoll 触发下一次 EPOLLOUT 唤醒
@@ -380,7 +388,7 @@ HttpCode HttpConn::write()
             if (bytesHaveSent >= bytesToSend)
                 return HttpCode::GET_REQUEST;
             
-            if(ioVectorCount == 2 && ioVectorIdx == 0 && static_cast<size_t>(temp) >= ioVectors[0].iov_len ){
+            if(ioVectorCount == 2 && ioVectorIdx == 0 && static_cast<size_t>(temp) >= ioVectors[0].iov_len  ){
                 int off(temp-ioVectors[0].iov_len);
                 ioVectorIdx = 1;
                 ioVectors[1].iov_len -= off;
@@ -391,7 +399,7 @@ HttpCode HttpConn::write()
             }
         }     
     else{
-            int temp = writev(socketFd, &ioVectors[ioVectorIdx], ioVectorCount);
+            int temp = writev(socketFd, &ioVectors[ioVectorIdx], ioVectorCount - ioVectorIdx);
 
             if (temp < 0) {
                 // TCP 写缓冲区已满，必须等待 epoll 触发下一次 EPOLLOUT 唤醒

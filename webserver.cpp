@@ -27,6 +27,7 @@ void WebServer::eventListen()
 {
     //网络编程基础步骤
     listenFd = socket(PF_INET, SOCK_STREAM, 0);
+
     assert(listenFd >= 0);
     
     int flag = 1;
@@ -44,10 +45,16 @@ void WebServer::eventListen()
     address.sin_port = htons(port);
 
     int ret = bind(listenFd, (struct sockaddr *)&address, sizeof(address));
-    assert(ret >= 0);
-    
+    if(ret < 0){
+        LOG_ERROR("Server bind port %d failed", port);
+        exit(4399);
+    }
     ret = listen(listenFd, 5);
-    assert(ret >= 0);
+    if (ret < 0){ 
+        LOG_ERROR("Server listen port %d failed", port);
+        exit(4399);
+    }
+    LOG_INFO("WebServer started successfully, listening on port %d", port);
 }
 
 bool WebServer::dealClientData()
@@ -62,6 +69,9 @@ bool WebServer::dealClientData()
             LOG_ERROR("%s:errno is:%d", "accept error", errno);
             return false;
         }
+        
+        LOG_INFO("New connection accepted, fd: %d", connfd);
+
         if (connfd > consts::MAX_FD)
         {
             const char *info = "Internal server busy";
