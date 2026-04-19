@@ -21,6 +21,7 @@ SRCS = main.cpp \
 # 显式指定库路径（示例，根据实际路径调整）
 LDFLAGS = -L/usr/lib/x86_64-linux-gnu -L/usr/local/lib
 
+# 修改后的链接行
 server: $(SRCS)
 	$(CXX) -o server $^ $(CXXFLAGS) $(LDFLAGS) -pthread -lmysqlclient -lmavsdk
 

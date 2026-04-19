@@ -440,6 +440,7 @@ bool HttpConn::processWrite(HttpCode ret)
         ) == false
         )return false;
 
+        ioVectorCount = 2;
         int fd = open(realFilePath.data(), O_RDONLY);
         ioVectors[1].iov_base = fileAddress = (char *)mmap(0, bytesToSend, PROT_READ, MAP_PRIVATE, fd, 0);
         close(fd);
