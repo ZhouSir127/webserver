@@ -18,7 +18,7 @@
 class WebServer
 {
 public:
-WebServer(int port,
+WebServer(uint16_t port,
         bool listenET,bool connectET,
         int lifeSpan,int timeSlot,
         const std::string&IP,int sqlport,const std::string& user, const std::string& passWord, const std::string& databaseName, int sql_num, const std::string&root,
@@ -33,7 +33,7 @@ private:
     
     bool dealClientData();
 
-    int port;
+    uint16_t port;
     bool isListenEt;
     int listenFd;
 

@@ -93,12 +93,12 @@ HttpCode HttpConn::readOnce()
         if(readBuffer.size()==readIdx){
             if(readBuffer.size() == consts::READ_BUFFER_SIZE)
                 return HttpCode::BAD_REQUEST;
-            readBuffer.resize( std::min( (readBuffer.size()<<1),(size_t)consts::READ_BUFFER_SIZE) );
+            readBuffer.resize( std::min( (readBuffer.size()<<1),consts::READ_BUFFER_SIZE) );
         }
-        int bytes_read = recv(fd, &readBuffer[readIdx] ,readBuffer.size()-readIdx,0);
+        ssize_t bytes_read = recv(fd, &readBuffer[readIdx] ,readBuffer.size()-readIdx,0);
     
         if (bytes_read < 0 ){
-            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)//无数据可读
+            if (errno == EAGAIN || errno == EINTR)//无数据可读
                 return HttpCode::NO_REQUEST;
             return HttpCode::BAD_REQUEST;//读故障
         }else if (bytes_read == 0)//对方正常关闭了连接
@@ -113,7 +113,7 @@ HttpCode HttpConn::readOnce()
             
             ssize_t bytes_read = recv(fd, &readBuffer[readIdx], readBuffer.size()-readIdx , 0);
             if (bytes_read < 0 ){
-                if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+                if (errno == EAGAIN || errno == EINTR)
                     break;
                 return HttpCode::BAD_REQUEST;
             }else if (bytes_read == 0)
@@ -245,48 +245,67 @@ HttpCode HttpConn::doRequest()
         if (url[1] == 'r'){    //提交注册
             if (user.exists(name) ==false){
                 if(user.add(name,password)){
-                    realFilePath = std::string(root + "/log.html");
+                    realFilePath = root + "/log.html";
                     LOG_INFO("User Register Success: %s", name.c_str());
                 }else{
-                    realFilePath = std::string(root + "/registerError.html");
+                    realFilePath = root + "/registerError.html";
                     LOG_ERROR("User Register Failed (DB Error): %s", name.c_str());
                 }
             }else{
-                realFilePath = std::string(root + "/registerError.html");
+                realFilePath = root + "/registerError.html";
                 LOG_ERROR("User Register Failed (User Exists): %s", name.c_str());
             }
         }else if ( user.check(name,password) ){
-            realFilePath = std::string(root + "/index.html");
+            realFilePath = root + "/index.html";
             LOG_INFO("User Login Success: %s", name.c_str());
         }else{
-            realFilePath = std::string(root + "/logError.html");
+            realFilePath = root + "/logError.html";
             LOG_ERROR("User Login Failed (Wrong password/No user): %s", name.c_str());
         }
     }else{
         if(url.size() == 1)
-            realFilePath = std::string(root + "/log.html" );
+            realFilePath = root + "/log.html" ;
         else
             switch (url[1]){
                 case 'r'://注册页面
-                    realFilePath = std::string(root + "/register.html" );
+                    realFilePath = root + "/register.html" ;
                     break;
                 case 'c':// /1 -> /connect
+                    // 1. 初始化 MAVSDK 并发起连接 (如果还没做的话)
                     if (!mavsdkPtr) {
                         mavsdk::Mavsdk::Configuration config(mavsdk::ComponentType::CompanionComputer);
                         mavsdkPtr = std::make_shared<mavsdk::Mavsdk>(config);
-                    }
-                    
-                    // 继续尝试连接飞控
-                    mavsdkPtr->add_any_connection("udp://:14540");
-                    
-                    // 简易处理：等待飞控连接
-                    usleep(100000); 
-                    if (!mavsdkPtr) {
-                        mavsdk::Mavsdk::Configuration config(mavsdk::ComponentType::CompanionComputer);
-                        mavsdkPtr = std::make_shared<mavsdk::Mavsdk>(config);
-                        // 连接动作只在第一次进行
                         mavsdkPtr->add_any_connection("udp://:14540");
+                        LOG_INFO("正在初始化 MAVSDK 并监听 udp://:14540...");
                     }
+                    
+                    // 2. 等待并获取无人机系统 (System)
+                    // 由于网络发现需要一点时间，我们加一个简易的轮询等待 (最多等 1.5 秒)
+                    if (!drone) {
+                        bool found = false;
+                        for (int i = 0; i < 15; ++i) { 
+                            if (!mavsdkPtr->systems().empty()) {
+                                drone = mavsdkPtr->systems().at(0); // 获取发现的第一个无人机系统
+                                if (drone->is_connected()) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            usleep(100000); // 睡 100 毫秒再查
+                        }
+
+                        // 3. 实例化动作和遥测插件！(最关键的一步)
+                        if (found && drone) {
+                            action = std::make_shared<mavsdk::Action>(drone);
+                            telemetry = std::make_shared<mavsdk::Telemetry>(drone);
+                            LOG_INFO("成功连接到无人机系统！Action 和 Telemetry 插件已就绪。");
+                        } else {
+                            drone = nullptr; // 没连上就清空，防止野指针
+                            LOG_ERROR("连接超时：未在 udp://:14540 发现无人机系统。请检查仿真器(SITL)是否运行。");
+                        }
+                    } else
+                        LOG_INFO("无人机系统早已连接，无需重复连接。");
+                    
                     break;
                 case 'd':// /2 -> /disconnect
                     action = nullptr;
@@ -369,7 +388,7 @@ HttpCode HttpConn::write()
 
             if (temp < 0) {
                 // TCP 写缓冲区已满，必须等待 epoll 触发下一次 EPOLLOUT 唤醒
-                if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) 
+                if (errno == EAGAIN || errno == EINTR) 
                     return HttpCode::NO_REQUEST; 
                 // 真的发生了网络错误（例如客户端断开连接）
                 return HttpCode::CLOSED_CONNECTION; 
@@ -381,7 +400,7 @@ HttpCode HttpConn::write()
                 return HttpCode::GET_REQUEST;
             
             if(ioVectorCount == 2 && ioVectorIdx == 0 && static_cast<size_t>(temp) >= ioVectors[0].iov_len  ){
-                int off(temp-ioVectors[0].iov_len);
+                ssize_t off(temp-ioVectors[0].iov_len);
                 ioVectorIdx = 1;
                 ioVectors[1].iov_len -= off;
                 ioVectors[1].iov_base = static_cast<char*>(ioVectors[1].iov_base) + off;
@@ -391,11 +410,11 @@ HttpCode HttpConn::write()
             }
         }     
     else{
-            int temp = writev(fd, &ioVectors[ioVectorIdx], ioVectorCount - ioVectorIdx);
+            ssize_t temp = writev(fd, &ioVectors[ioVectorIdx], ioVectorCount - ioVectorIdx);
 
             if (temp < 0) {
                 // TCP 写缓冲区已满，必须等待 epoll 触发下一次 EPOLLOUT 唤醒
-                if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) 
+                if (errno == EAGAIN || errno == EINTR) 
                     return HttpCode::NO_REQUEST; 
                 // 真的发生了网络错误（例如客户端断开连接）
                 return HttpCode::CLOSED_CONNECTION; 
@@ -407,7 +426,7 @@ HttpCode HttpConn::write()
                 return HttpCode::GET_REQUEST;
             
             if(ioVectorCount == 2 && ioVectorIdx == 0 && static_cast<size_t>(temp) >= ioVectors[0].iov_len ){
-                int off(temp-ioVectors[0].iov_len);
+                ssize_t off(temp-ioVectors[0].iov_len);
                 ioVectorIdx = 1;
                 ioVectors[1].iov_len -= off;
                 ioVectors[1].iov_base = static_cast<char*>(ioVectors[1].iov_base) + off;
@@ -434,7 +453,7 @@ bool HttpConn::processWrite(HttpCode ret)
 
         ioVectorCount = 2;
         int fd = open(realFilePath.data(), O_RDONLY);
-        ioVectors[1].iov_base = fileAddress = (char *)mmap(0, bytesToSend, PROT_READ, MAP_PRIVATE, fd, 0);
+        ioVectors[1].iov_base = fileAddress = static_cast<char*>(mmap(0, bytesToSend, PROT_READ, MAP_PRIVATE, fd, 0));
         close(fd);
 
     }else if(ret == HttpCode::BAD_REQUEST){
@@ -473,7 +492,7 @@ bool HttpConn::processWrite(HttpCode ret)
         ) == false
         )return false;
     
-    ioVectors[0].iov_base = const_cast<char*>(writeBuffer.data() );
+    ioVectors[0].iov_base = writeBuffer.data();
     ioVectors[0].iov_len = writeBuffer.size();
     bytesToSend += ioVectors[0].iov_len;
     return true;

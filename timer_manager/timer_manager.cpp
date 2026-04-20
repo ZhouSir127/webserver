@@ -93,7 +93,7 @@ void SignalHandler::sigHandler(int sig)
 {
     //为保证函数的可重入性，保留原来的errno
     int save_errno = errno;
-    write(pipefd[1], (char *)&sig, 1);
+    write(pipefd[1], reinterpret_cast<char*>(&sig), 1);
     errno = save_errno;
 }
 
@@ -115,23 +115,15 @@ void SignalHandler::addSig(int sig, void(*handler)(int), bool restart)
 void SignalHandler::dealWithSignal (bool &timeout, bool &stopServer) 
 {
     char signals[1024];
-    int ret = recv(pipefd[0], signals, sizeof(signals), 0);
+    ssize_t ret = recv(pipefd[0], signals, sizeof(signals), 0);
     if (ret <= 0)
         return;
     
     for (int i = 0; i < ret; ++i)
-        switch (signals[i]){
-            case SIGALRM:
-            {
-                timeout = true;
-                break;
-            }
-            case SIGTERM:
-            {
-                stopServer = true;
-                break;
-            }
-        }
+        if (signals[i] == SIGALRM )
+            timeout = true;
+        else if (signals[i] == SIGTERM )
+            stopServer = true;   
 }
 
 

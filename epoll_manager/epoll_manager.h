@@ -2,7 +2,6 @@
 #define EPOLL_MANAGER_H
 
 #include <cstdlib>
-#include <ctime>
 #include <sys/epoll.h>
 #include <unistd.h>
 #include <stdlib.h>

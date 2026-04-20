@@ -1,7 +1,7 @@
 #include "webserver.h"
 #include "epoll_manager/epoll_manager.h"
 
-WebServer::WebServer(int port,
+WebServer::WebServer(uint16_t port,
                 bool listenET,bool connectET,  
                 int lifeSpan,int timeSlot,
                 const std::string&IP,int sqlport,const std::string& user, const std::string& passWord, const std::string& databaseName, int sql_num,const std::string&root,
@@ -44,7 +44,7 @@ void WebServer::eventListen()
     address.sin_addr.s_addr = htonl(INADDR_ANY);
     address.sin_port = htons(port);
 
-    int ret = bind(listenFd, (struct sockaddr *)&address, sizeof(address));
+    int ret = bind(listenFd, reinterpret_cast<struct sockaddr*>(&address), sizeof(address));
     if(ret < 0){
         LOG_ERROR("Server bind port %d failed", port);
         exit(4399);
@@ -63,7 +63,7 @@ bool WebServer::dealClientData()
     socklen_t client_addrlength = sizeof(client_address);
     if (isListenEt == false)
     {
-        int connfd = accept(listenFd, (struct sockaddr *)&client_address, &client_addrlength);
+        int connfd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength);
         if (connfd < 0)
         {
             LOG_ERROR("%s:errno is:%d", "accept error", errno);
@@ -90,7 +90,7 @@ bool WebServer::dealClientData()
     else
         while (1)
         {
-            int connfd = accept(listenFd, (struct sockaddr *)&client_address, &client_addrlength);
+            int connfd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength);
             if (connfd < 0)
                 break;
             if ( connfd > consts::MAX_FD)

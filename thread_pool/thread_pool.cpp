@@ -43,9 +43,15 @@ void ThreadPool::run()
                     epollManager.modify(fd,EPOLLIN);
                     timerManager.adjust(fd);
                     break;
-                default:    //准备发送响应
+                case HttpCode::GET_REQUEST://读处理后需要响应
+                case HttpCode::BAD_REQUEST:
+                case HttpCode::NO_RESOURCE:
+                case HttpCode::FORBIDDEN_REQUEST:
+                case HttpCode::FILE_REQUEST:
                     epollManager.modify(fd,::EPOLLOUT);
                     timerManager.adjust(fd);
+                    break;
+                default: // 满足 -Wswitch-default，处理预料之外的情况
                     break;
             }            
         else{

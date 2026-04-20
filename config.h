@@ -1,7 +1,8 @@
 #include <string>
+#include <cstdint>
 
 namespace webserver{
-    const int PORT = 8080; 
+    const uint16_t PORT = 8080; 
     const bool LISTENET = false;
     const bool CONNECTET = false;
 }

@@ -1,98 +1,122 @@
-# ---------------------------------------------------------
-# 编译器设置
-# ---------------------------------------------------------
-CXX          ?= g++
-TARGET       := server
+# ==========================================
+# WebServer 工业级极严苛 Makefile (C++23)
+# ==========================================
 
-# ---------------------------------------------------------
-# 严苛的编译选项 (去掉了 -Wshadow，增加了逻辑与标准检查)
-# ---------------------------------------------------------
-# -Wduplicated-cond: 检查 if-else 中重复的条件
-# -Wduplicated-branches: 检查 if-else 不同分支代码是否完全一致
-# -Wlogical-op: 检查可疑的逻辑运算 (如 x < 0 && x > 10)
-# -Wnull-dereference: 尽力检测可能的空指针解引用
-# -Wdouble-promotion: 检查 float 是否被隐式提升为 double (性能损耗点)
-# -Wextra-semi: 检查多余的分号
-# -Wuseless-cast: 检查无意义的类型转换
-STRICT_FLAGS := -Wall -Wextra -Werror -Wpedantic \
-                -Wduplicated-cond -Wduplicated-branches -Wlogical-op \
-                -Wnull-dereference -Wdouble-promotion -Wextra-semi \
-                -Wuseless-cast -Wformat=2 -Wconversion -Wunused \
-                -Wold-style-cast -fstack-protector-all
+CXX      := g++
+TARGET   := server
 
-CXXFLAGS     := -std=c++23 $(STRICT_FLAGS) -I/usr/include/mavsdk
+# ------------------------------------------
+# 极严苛警告标志 (The Ultimate Strict Flags)
+# ------------------------------------------
+# 基础与扩展
+WARNINGS := -Wall -Wextra -Werror -Wpedantic
 
-# ---------------------------------------------------------
-# 运行时严苛检查 (Sanitizers) - 这是提升稳定性的杀手锏
-# ---------------------------------------------------------
-# Address Sanitizer (ASan): 检测内存泄漏、越界访问、Use-after-free
-# Undefined Behavior Sanitizer (UBSan): 检测整数溢出、除零等未定义行为
-# 注：开启此项会轻微降低运行速度，但能捕捉 90% 的内存 Bug
-SAN_FLAGS    := -fsanitize=address -fsanitize=undefined
+# 内存、指针与类型安全
+# -Wnull-dereference: 检测可能的空指针解引用
+# -Wpointer-arith: 禁止对 void* 进行非法的指针算术运算
+# -Wcast-align: 检测可能导致架构崩溃的内存对齐转换问题
+# -Wcast-qual: 严禁将 const 强转为非 const (破坏常量正确性)
+WARNINGS += -Wnull-dereference -Wpointer-arith -Wcast-align -Wcast-qual
+WARNINGS += -Wundef -Wvla -Wredundant-decls
 
-# ---------------------------------------------------------
-# 调试与优化选项
-# ---------------------------------------------------------
+# 逻辑与条件判定
+# -Wswitch-enum: switch 语句必须覆盖 enum 的所有枚举值
+WARNINGS += -Wlogical-op -Wduplicated-cond -Wduplicated-branches -Wmisleading-indentation
+WARNINGS += -Wswitch-default -Wswitch-enum
+
+# 隐式转换与强制转换
+WARNINGS += -Wconversion -Wdouble-promotion -Wuseless-cast -Wold-style-cast -Wsign-promo
+
+# C++ 面向对象专属
+# -Woverloaded-virtual: 防止派生类意外隐藏基类的虚函数
+# -Wnon-virtual-dtor: 带虚函数的类必须拥有虚析构函数 (防止多态内存泄漏)
+# -Winit-self: 检查类成员是否用自己初始化了自己
+WARNINGS += -Woverloaded-virtual -Wnon-virtual-dtor -Winit-self
+
+# 格式化字符串安全
+WARNINGS += -Wformat=2 -Wformat-security
+
+# 【注】：为了允许 expire(expire) 这种写法，已明确移除 -Wshadow 选项。
+
+# ------------------------------------------
+# 编译参数
+# ------------------------------------------
+CXXFLAGS := -std=c++23 $(WARNINGS) -I/usr/include/mavsdk
+
+# ------------------------------------------
+# 安全防护机制 (Security Hardening)
+# ------------------------------------------
+# 栈保护与缓冲区溢出检测 (防止黑客通过溢出攻击你的服务器)
+SECURITY_FLAGS := -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE
+
+# ------------------------------------------
+# 调试与优化配置
+# ------------------------------------------
 DEBUG ?= 1
 ifeq ($(DEBUG), 1)
-    # 调试模式：开启 Sanitizers 和 STL 边界检查
-    CXXFLAGS += -g -O0 -D_GLIBCXX_ASSERTIONS $(SAN_FLAGS)
-    LDFLAGS  += $(SAN_FLAGS)
+    # 开发模式：开启 ASan/UBSan 动态内存追踪，STL 边界检查
+    SANITIZERS := -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer
+    CXXFLAGS += -g -O0 -D_GLIBCXX_ASSERTIONS $(SANITIZERS) $(SECURITY_FLAGS)
+    LDFLAGS  := $(SANITIZERS) -pie
 else
-    # 发布模式：极限优化，关闭 Sanitizers 以换取极致性能
-    CXXFLAGS += -O3 -DNDEBUG
+    # 生产模式：极限性能优化，开启 RELRO 内存只读保护
+    CXXFLAGS += -O3 -DNDEBUG $(SECURITY_FLAGS)
+    LDFLAGS  := -pie -Wl,-z,relro,-z,now
 endif
 
-# ---------------------------------------------------------
-# 路径与库设置
-# ---------------------------------------------------------
-LDFLAGS      += -L/usr/lib/x86_64-linux-gnu -L/usr/local/lib
-LIBS         := -pthread -lmysqlclient -lmavsdk
+# ------------------------------------------
+# 库依赖
+# ------------------------------------------
+LDFLAGS += -L/usr/lib/x86_64-linux-gnu -L/usr/local/lib
+LIBS    := -pthread -lmysqlclient -lmavsdk
 
-# ---------------------------------------------------------
-# 源文件与依赖管理
-# ---------------------------------------------------------
-SRCS         := main.cpp \
-                webserver.cpp \
-                http_conn/http_conn.cpp \
-                thread_pool/thread_pool.cpp \
-                timer_manager/timer_manager.cpp \
-                epoll_manager/epoll_manager.cpp \
-                log/log.cpp \
-                CGImysql/sql_connection_pool.cpp
+# ------------------------------------------
+# 源文件与目标文件
+# ------------------------------------------
+# ------------------------------------------
+# 源文件与目标文件 (修正后的版本)
+# ------------------------------------------
+SRCS    := main.cpp \
+           webserver.cpp \
+           http_conn/http_conn.cpp \
+           thread_pool/thread_pool.cpp \
+           timer_manager/timer_manager.cpp \
+           epoll_manager/epoll_manager.cpp \
+           log/log.cpp \
+           connection_pool/connection_pool.cpp  # 修正此处
 
-OBJS         := $(SRCS:.cpp=.o)
-DEPS         := $(SRCS:.cpp=.d)
+OBJS    := $(SRCS:.cpp=.o)
+DEPS    := $(SRCS:.cpp=.d)
 
-# ---------------------------------------------------------
+# ------------------------------------------
 # 构建规则
-# ---------------------------------------------------------
+# ------------------------------------------
+.PHONY: all clean rebuild run
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	@echo "Linking with Sanitizers: $(TARGET)..."
+	@echo "🔗 Linking executable [$(TARGET)]..."
 	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS) $(LIBS)
+	@echo "✅ Build completed successfully!"
 
 %.o: %.cpp
-	@echo "Compiling with strict checks: $<..."
+	@echo "🔨 Compiling $<..."
 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 -include $(DEPS)
 
-# ---------------------------------------------------------
-# 功能指令
-# ---------------------------------------------------------
-
+# ------------------------------------------
+# 辅助指令
+# ------------------------------------------
 clean:
+	@echo "🧹 Cleaning up build files..."
 	rm -f $(TARGET) $(OBJS) $(DEPS)
 
 rebuild: clean all
 
-.PHONY: all clean rebuild run
-
 run: $(TARGET)
-	@echo "\n[1/2] Cleaning up port 8080..."
+	@echo "\n[1/2] 正在释放端口 8080..."
 	-@fuser -k 8080/tcp 2>/dev/null || true
-	@echo "[2/2] Running $(TARGET) (ASan/UBSan Active)...\n"
+	@echo "[2/2] 🚀 启动 $(TARGET) (开启内存监控)...\n"
 	./$(TARGET)

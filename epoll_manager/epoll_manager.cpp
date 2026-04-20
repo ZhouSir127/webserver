@@ -32,6 +32,8 @@ int EpollManager::add(int fd,FdType type)
             event.events = EPOLLIN | EPOLLRDHUP | EPOLLONESHOT;
             if (isConnectEt)
                 event.events |= EPOLLET;
+        default:
+            break;
         }
     
     setNonBlocking(fd);
