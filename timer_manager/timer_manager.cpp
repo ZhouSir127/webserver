@@ -6,34 +6,34 @@
 #include <cstring>
 #include "../log/log.h"
 
-void SortedTimerList::add(int sock)
+void SortedTimerList::add(int fd)
 {
     std::unique_lock<std::mutex>Lock(lock);
 
-    std::shared_ptr<TimerNode> timer = std::make_shared<TimerNode> (time(nullptr)+lifeSpan,sock);
+    std::shared_ptr<Node> node = std::make_shared<Node> (time(nullptr)+lifeSpan,fd);
 
-    timer->next=tail;
-    timer->prev=tail->prev;
+    node->next=tail;
+    node->prev=tail->prev;
 
-    std::shared_ptr<TimerNode> next = timer -> next.lock();
-    std::shared_ptr<TimerNode> prev = timer -> prev.lock();
+    std::shared_ptr<Node> next = node -> next.lock();
+    std::shared_ptr<Node> prev = node -> prev.lock();
 
-    next->prev=timer;
-    prev->next=timer;
+    next->prev=node;
+    prev->next=node;
         
-    usersTimer[sock]=timer;
+    fdToNode[fd]=node;
 }
 
-void SortedTimerList::adjust(int sock){
+void SortedTimerList::adjust(int fd){
     std::unique_lock<std::mutex>Lock(lock);
 
-    std::shared_ptr<TimerNode>&timer = usersTimer[sock];
+    std::shared_ptr<Node>&timer = fdToNode[fd];
     timer->expire=time(nullptr)+lifeSpan;
 
     if( timer != tail->prev.lock() ){    
     
-        std::shared_ptr<TimerNode> next = timer -> next.lock();
-        std::shared_ptr<TimerNode> prev = timer -> prev.lock();
+        std::shared_ptr<Node> next = timer -> next.lock();
+        std::shared_ptr<Node> prev = timer -> prev.lock();
 
         next->prev=prev;
         prev->next=next;
@@ -41,8 +41,8 @@ void SortedTimerList::adjust(int sock){
         timer->next=tail;
         timer->prev=tail->prev;
         
-        std::shared_ptr<TimerNode> Next = timer -> next.lock();
-        std::shared_ptr<TimerNode> Prev = timer -> prev.lock();
+        std::shared_ptr<Node> Next = timer -> next.lock();
+        std::shared_ptr<Node> Prev = timer -> prev.lock();
 
         Next->prev=timer;
         Prev->next=timer;
@@ -50,14 +50,14 @@ void SortedTimerList::adjust(int sock){
     
 }
 
-void SortedTimerList::remove(int sock)
+void SortedTimerList::remove(int fd)
 {    
     std::unique_lock<std::mutex>Lock(lock);
 
-    std::shared_ptr<TimerNode> &timer = usersTimer[sock];
+    std::shared_ptr<Node> &timer = fdToNode[fd];
 
-    std::shared_ptr<TimerNode> next = timer -> next.lock();
-    std::shared_ptr<TimerNode> prev = timer -> prev.lock();
+    std::shared_ptr<Node> next = timer -> next.lock();
+    std::shared_ptr<Node> prev = timer -> prev.lock();
 
     prev->next=next;
     next->prev=prev;
@@ -69,23 +69,23 @@ void SortedTimerList::tick()
 {
     std::unique_lock<std::mutex>Lock(lock);
 
-    std::shared_ptr<TimerNode> end = head -> next.lock();
+    std::shared_ptr<Node> end = head -> next.lock();
     time_t now=time(nullptr);
     
     death.clear();
 
     while( end!=tail && end->expire <= now){
-        death.push_back(end->sock);
-        usersTimer[end->sock].reset();
+        death.push_back(end->fd);
+        fdToNode[end->fd].reset();
         end=end->next.lock();
-        LOG_INFO("Connection timeout, fd: %d. Marking for removal.", end->sock);
+        LOG_INFO("Connection timeout, fd: %d. Marking for removal.", end->fd);
     }
 
     end->prev = head;
     head->next = end;
 }
 
-time_t SignalHandler::timeSlot;
+unsigned int SignalHandler::timeSlot;
 int SignalHandler::pipefd[2];
 
 //信号处理函数
@@ -109,15 +109,15 @@ void SignalHandler::addSig(int sig, void(*handler)(int), bool restart)
         sa.sa_flags |= SA_RESTART;
     
     sigfillset(&sa.sa_mask);
-    assert(sigaction(sig, &sa, NULL) != -1);
+    sigaction(sig, &sa, NULL);
 }
 
-bool SignalHandler::dealWithSignal (bool &timeout, bool &stopServer) 
+void SignalHandler::dealWithSignal (bool &timeout, bool &stopServer) 
 {
     char signals[1024];
     int ret = recv(pipefd[0], signals, sizeof(signals), 0);
     if (ret <= 0)
-        return false;
+        return;
     
     for (int i = 0; i < ret; ++i)
         switch (signals[i]){
@@ -132,8 +132,6 @@ bool SignalHandler::dealWithSignal (bool &timeout, bool &stopServer)
                 break;
             }
         }
-    
-    return true;
 }
 
 

@@ -113,10 +113,10 @@ bool WebServer::dealClientData()
 void WebServer::eventLoop()
 {
     epollManager.add(listenFd,EpollManager::FdType::LISTEN);
-    epollManager.add(timerManager.getPipefd0(), EpollManager::FdType::PIPE);
+    epollManager.add(timerManager.getPipeReadFd(), EpollManager::FdType::PIPE);
 
     bool timeout = false;
-    bool stop_server = false;
+    bool stopServer = false;
     
     do{
         int number = epollManager.wait();
@@ -137,11 +137,10 @@ void WebServer::eventLoop()
                     dealClientData();
                 else
                     LOG_ERROR("%s", "epoll failure");
-            }else if ( event.data.fd == timerManager.getPipefd0() ){
-                if(event.events & EPOLLIN ){
-                    if(false == timerManager.dealWithSignal(timeout,stop_server) )
-                        LOG_ERROR("%s", "dealclientdata failure");
-                }else
+            }else if ( event.data.fd == timerManager.getPipeReadFd() ){
+                if(event.events & EPOLLIN )
+                    timerManager.dealWithSignal(timeout,stopServer);
+                else
                     LOG_ERROR("%s", "epoll failure");
             }else if(event.events & EPOLLIN)
                 threadPool.append(event.data.fd, false);
@@ -170,5 +169,5 @@ void WebServer::eventLoop()
 
             timeout = false;
         }
-    }while (stop_server==false);
+    }while (stopServer==false);
 }

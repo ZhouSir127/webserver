@@ -95,10 +95,10 @@ HttpCode HttpConn::readOnce()
                 return HttpCode::BAD_REQUEST;
             readBuffer.resize( std::min( (readBuffer.size()<<1),(size_t)consts::READ_BUFFER_SIZE) );
         }
-        int bytes_read = recv(socketFd, &readBuffer[readIdx] ,readBuffer.size()-readIdx,0);
+        int bytes_read = recv(fd, &readBuffer[readIdx] ,readBuffer.size()-readIdx,0);
     
         if (bytes_read < 0 ){
-            if (errno == EAGAIN || errno == EWOULDBLOCK)//无数据可读
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)//无数据可读
                 return HttpCode::NO_REQUEST;
             return HttpCode::BAD_REQUEST;//读故障
         }else if (bytes_read == 0)//对方正常关闭了连接
@@ -111,9 +111,9 @@ HttpCode HttpConn::readOnce()
             if(readBuffer.size()==readIdx)
                 readBuffer.resize(readBuffer.size()<<1 );
             
-            int bytes_read = recv(socketFd, &readBuffer[readIdx], readBuffer.size()-readIdx , 0);
+            ssize_t bytes_read = recv(fd, &readBuffer[readIdx], readBuffer.size()-readIdx , 0);
             if (bytes_read < 0 ){
-                if (errno == EAGAIN || errno == EWOULDBLOCK)
+                if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
                     break;
                 return HttpCode::BAD_REQUEST;
             }else if (bytes_read == 0)
@@ -183,7 +183,7 @@ HttpCode HttpConn::parseHeaders()
             return HttpCode::BAD_REQUEST;
         if ( line.compare(pos, 10 , "keep-alive") == 0)
             isLinger = true;
-    }else if (line.compare(0 , 15 , "Content-length:") == 0){
+    }else if (line.compare(0 , 15 , "Content-Length:") == 0){
         size_t pos = line.find_first_not_of ( " \t" , 15 );
         if(pos == std::string::npos)
             return HttpCode::BAD_REQUEST;
@@ -243,19 +243,9 @@ HttpCode HttpConn::doRequest()
             return HttpCode::BAD_REQUEST;
     
         if (url[1] == 'r'){    //提交注册
-            if (users.exists(name) ==false ){
-                std::string sql_insert = "INSERT INTO user(username, passwd) VALUES('" 
-                        + name 
-                        + "', '" 
-                        + password 
-                        + "')";
-
-                MYSQL *mysql=nullptr;
-                connectionRAII mysqlcon(mysql, &connPool);
-                
-                if (mysql_query(mysql, sql_insert.data() ) == 0){
+            if (user.exists(name) ==false){
+                if(user.add(name,password)){
                     realFilePath = std::string(root + "/log.html");
-                    users.add(name,password);
                     LOG_INFO("User Register Success: %s", name.c_str());
                 }else{
                     realFilePath = std::string(root + "/registerError.html");
@@ -265,7 +255,7 @@ HttpCode HttpConn::doRequest()
                 realFilePath = std::string(root + "/registerError.html");
                 LOG_ERROR("User Register Failed (User Exists): %s", name.c_str());
             }
-        }else if ( users.check(name,password) ){
+        }else if ( user.check(name,password) ){
             realFilePath = std::string(root + "/index.html");
             LOG_INFO("User Login Success: %s", name.c_str());
         }else{
@@ -375,11 +365,11 @@ HttpCode HttpConn::write()
 {
     if(isConnectEt)
         while (true) {
-            ssize_t temp = writev(socketFd, &ioVectors[ioVectorIdx], ioVectorCount - ioVectorIdx);
+            ssize_t temp = writev(fd, &ioVectors[ioVectorIdx], ioVectorCount - ioVectorIdx);
 
             if (temp < 0) {
                 // TCP 写缓冲区已满，必须等待 epoll 触发下一次 EPOLLOUT 唤醒
-                if (errno == EAGAIN || errno == EWOULDBLOCK) 
+                if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) 
                     return HttpCode::NO_REQUEST; 
                 // 真的发生了网络错误（例如客户端断开连接）
                 return HttpCode::CLOSED_CONNECTION; 
@@ -401,11 +391,11 @@ HttpCode HttpConn::write()
             }
         }     
     else{
-            int temp = writev(socketFd, &ioVectors[ioVectorIdx], ioVectorCount - ioVectorIdx);
+            int temp = writev(fd, &ioVectors[ioVectorIdx], ioVectorCount - ioVectorIdx);
 
             if (temp < 0) {
                 // TCP 写缓冲区已满，必须等待 epoll 触发下一次 EPOLLOUT 唤醒
-                if (errno == EAGAIN || errno == EWOULDBLOCK) 
+                if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) 
                     return HttpCode::NO_REQUEST; 
                 // 真的发生了网络错误（例如客户端断开连接）
                 return HttpCode::CLOSED_CONNECTION; 

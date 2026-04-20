@@ -4,16 +4,16 @@ namespace webserver{
     const int PORT = 8080; 
     const bool LISTENET = false;
     const bool CONNECTET = false;
-};
+}
 
 namespace timer{
     const int LIFE_SPAN = 3600; 
-    const int TIMESLOT = 5;
-};
+    const unsigned int TIMESLOT = 5;
+}
 
 namespace http{
-    const std::string ROOT = "../root";
-};
+    const std::string ROOT = "/root/webserver/root";
+}
 
 namespace mysql{
     const std::string IP = "127.0.0.1";
@@ -22,12 +22,12 @@ namespace mysql{
     const std::string PASSWORD = "4399";
     const std::string NAME = "webserver_db";
     const int NUM = 8;
-};
+}
 
 namespace threadPool{
     const int NUM = 8;
     const int MAX_REQUEST = 10000;
-};
+}
 
 namespace sysLog{
     const std::string FILE = "/var/log/webserver";

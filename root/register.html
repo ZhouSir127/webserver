@@ -33,9 +33,13 @@
             fetch('/r', {
                 method: 'POST',
                 body: user + " " + pass
-            }).then(res => {
-                if(res.redirected) window.location.href = res.url;
-                else document.write(res.text());
+            })
+            .then(res => res.text())
+            .then(html => {
+                // 拿到真实的 html 字符串后，重新绘制整个网页
+                document.open();
+                document.write(html);
+                document.close();
             });
         }
     </script>

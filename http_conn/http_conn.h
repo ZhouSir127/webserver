@@ -1,6 +1,6 @@
 #ifndef HTTPCONNECTION_H
 #define HTTPCONNECTION_H
-#include <unistd.h>
+
 #include <sys/types.h>
 #include <sys/epoll.h>
 #include <fcntl.h>
@@ -9,7 +9,6 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <sys/stat.h>
-#include <string.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,12 +21,9 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <mutex>
 #include <semaphore.h>
-#include "../CGImysql/sql_connection_pool.h"
 #include "../log/log.h"
 #include "../consts.h"
-//#include "../thread_pool/thread_pool.h"
 
 #include <sstream>  
 #include <utility>   
@@ -39,6 +35,8 @@
 #include <mavsdk/plugin_base.h>
 #include <mavsdk/plugins/action/action.h>
 #include <mavsdk/plugins/telemetry/telemetry.h>
+
+#include "../user/user.h"
 
 extern std::shared_ptr<mavsdk::Mavsdk> mavsdkPtr;
 extern std::shared_ptr<mavsdk::System> drone;
@@ -74,43 +72,6 @@ enum class HttpCode
     CLOSED_CONNECTION
 };
 
-class User{
-private:
-    std::unordered_map<std::string, std::string> m_users;
-    std::mutex lock;
-public:
-    User(connection_pool&connPool){
-        MYSQL *mysql = nullptr;
-        connectionRAII mysqlcon(mysql,&connPool);
-    
-        //在user表中检索username，passwd数据，浏览器端输入
-        if (mysql_query(mysql, "SELECT username,passwd FROM user"))
-            LOG_ERROR("SELECT error:%s\n", mysql_error(mysql));
-        
-        //从表中检索完整的结果集
-        MYSQL_RES *result = mysql_store_result(mysql);
-
-        if(!result)
-            throw std::exception();
-        //从结果集中获取下一行，将对应的用户名和密码，存入map中
-        while (MYSQL_ROW row = mysql_fetch_row(result))
-            m_users[row[0] ] = row[1];
-    
-        mysql_free_result(result); 
-    }
-    void add(const std::string&name,const std::string&password){
-        std::unique_lock<std::mutex>Lock(lock);
-        m_users[name]=password;
-    }
-    bool exists(const std::string&name){
-        std::unique_lock <std::mutex>Lock(lock);
-        return m_users.find(name) != m_users.end();
-    }
-    bool check(const std::string&name,const std::string&password){
-        std::unique_lock <std::mutex>Lock(lock);
-        return m_users[name] == password;
-    }
-};
 
 class HttpConn
 {
@@ -146,9 +107,7 @@ private:
     }
     
     const bool isConnectEt;
-    const int socketFd;
-    connection_pool& connPool;
-    User& users; 
+    const int fd;
     
     std::string readBuffer;
     size_t readIdx;
@@ -163,6 +122,7 @@ private:
     size_t contentLength;
     std::string requestBody;
 
+    User& user; 
     const std::string&root;
     std::string realFilePath;
 
@@ -178,11 +138,11 @@ private:
     size_t fileSize;   // 专门记录文件大小
 
 public:
-    HttpConn(bool connectET,int sockfd,connection_pool&m_connPool,User&m_users,const std::string&root)
-    :isConnectEt(connectET),socketFd(sockfd),connPool(m_connPool),users(m_users),
-    readIdx(0),checkedIdx(0),startIdx(0),
+    HttpConn(bool connectET,int fd,User&user,const std::string&root)
+    :isConnectEt(connectET),fd(fd),
+    readBuffer(1024,'\0'),readIdx(0),checkedIdx(0),startIdx(0),
     checkState(CheckState::CHECK_STATE_REQUESTLINE),method(HttpMethod::GET),isLinger(false),contentLength(0),
-    root(root),
+    user(user),root(root),
     bytesToSend(0),bytesHaveSent(0),ioVectorCount(1),ioVectorIdx(0),fileAddress(nullptr),fileSize(0)
     {}
     ~HttpConn(){
@@ -202,43 +162,41 @@ class Http{
 
 private:
 
-bool connectET;
-std::vector<std::unique_ptr<HttpConn> > users;
-connection_pool connPool;
-User m_users;
+bool isConnectEt;
+std::vector<std::unique_ptr<HttpConn> > fdToConn;
+User user;
 const std::string&root;
 
 public:
-    Http(bool connectET,const std::string&IP,int port,const std::string& User, const std::string& passWord, const std::string& databaseName, int sql_num,const std::string&root)
-    :connectET(connectET),
-    users(1+consts::MAX_FD),
-    connPool(IP,port,User,passWord,databaseName,sql_num),
-    m_users(connPool),
+    Http(bool isConnectEt,const std::string&IP,int port,const std::string& account, const std::string& password, const std::string& name, int num,const std::string&root)
+    :isConnectEt(isConnectEt),
+    fdToConn(1+consts::MAX_FD),
+    user(IP,port,account,password,name,num),
     root(root)
     {}
     
-    void add(int sock){
-        users[sock]=std::make_unique<HttpConn>(connectET,sock,connPool,m_users,root);
+    void add(int fd){
+        fdToConn[fd]=std::make_unique<HttpConn>(isConnectEt,fd,user,root);
     }    
     //关闭连接，关闭一个连接，客户总量减一
-    void remove(int sock){
-        users[sock].reset();
+    void remove(int fd){
+        fdToConn[fd].reset();
     }
 
-    HttpCode process(int sock){
-        return users[sock]->process();
+    HttpCode process(int fd){
+        return fdToConn[fd]->process();
     } 
 
-    HttpCode write(int sock){
-        return users[sock]->write();
+    HttpCode write(int fd){
+        return fdToConn[fd]->write();
     }
 
-    bool getLinger(int sock){
-        return users[sock]->getLinger();
+    bool getLinger(int fd){
+        return fdToConn[fd]->getLinger();
     }
 
-    void init(int sock){
-        users[sock]->init();
+    void init(int fd){
+        fdToConn[fd]->init();
     }
 };
 

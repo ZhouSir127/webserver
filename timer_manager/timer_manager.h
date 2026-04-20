@@ -20,51 +20,47 @@
 #include <sys/uio.h>
 
 #include <time.h>
-#include "../consts.h"
 
 #include <vector>
 #include <memory>
 #include <mutex>
+#include "../consts.h"
 
 class SortedTimerList
 {
 private:
 
-    struct TimerNode{    
-        TimerNode()=default;
-        
-        TimerNode(time_t expire,int sock):expire(expire),sock(sock){}
+    struct Node{    
+        Node():expire(0),fd(-1){}
+        Node(time_t expire,int fd):expire(expire),fd(fd){}
         
         time_t expire;
-        int sock;
+        int fd;
         
-        std::weak_ptr<TimerNode>prev;
-        std::weak_ptr<TimerNode>next;
+        std::weak_ptr<Node>prev;
+        std::weak_ptr<Node>next;
     };
 
     std::mutex lock;
     time_t lifeSpan;
-    std::shared_ptr<TimerNode> head;
-    std::shared_ptr<TimerNode> tail;
-    std::vector<std::shared_ptr<TimerNode> > usersTimer;    
-
+    std::shared_ptr<Node> head;
+    std::shared_ptr<Node> tail;
+    std::vector<std::shared_ptr<Node> > fdToNode;    
     std::vector<int> death;
 
 public:
-    SortedTimerList(time_t lifeSpan):lifeSpan(lifeSpan),head(std::make_shared<TimerNode>()),tail(std::make_shared<TimerNode>()),usersTimer(consts::MAX_FD+1){
+    SortedTimerList(time_t lifeSpan):lifeSpan(lifeSpan),head(std::make_shared<Node>()),tail(std::make_shared<Node>()),fdToNode(consts::MAX_FD+1){
         head->next=tail;
         tail->prev=head;
     }
     
-    void add(int sock);
-    void adjust(int sock);
-    void remove(int sock);
+    void add(int fd);
+    void adjust(int fd);
+    void remove(int fd);
     void tick();
     const std::vector<int>& getDeath() const { return death; }
     
-    bool exist(int fd)const {        
-        return (bool)usersTimer[fd];
-    }
+    //bool exist(int fd)const { return (bool)users[fd];}
 };
 
 
@@ -73,20 +69,20 @@ class SignalHandler{
 public:
     SignalHandler() = delete;
 
-    static int getPipefd1() { return pipefd[1]; }   
-    static int getPipefd0() { return pipefd[0]; }
+    static int getPipeWriteFd() { return pipefd[1]; }   
+    static int getPipeReadFd() { return pipefd[0]; }
 
     static void setAlarm()  { alarm(timeSlot); }
-    static bool dealWithSignal (bool &timeout, bool &stopServer);
+    static void dealWithSignal (bool &timeout, bool &stopServer);
 
-    static void init(int slot){
+    static void init(unsigned int slot){
         timeSlot = slot;
         int ret = socketpair(PF_UNIX, SOCK_STREAM, 0, pipefd);
         assert(ret != -1);
 
         addSig(SIGPIPE, SIG_IGN);
-        addSig(SIGALRM, sigHandler, false);
-        addSig(SIGTERM, sigHandler, false);
+        addSig(SIGALRM, sigHandler);
+        addSig(SIGTERM, sigHandler);
 
         setAlarm();
     }
@@ -96,10 +92,10 @@ public:
     }
 
 private:
-    static time_t timeSlot;
+    static unsigned int timeSlot;
     static int pipefd[2];
     //设置信号函数
-    static void addSig(int sig, void(*handler)(int), bool restart = true);
+    static void addSig(int sig, void(*handler)(int), bool restart = false );
     //信号处理函数
     static void sigHandler(int sig);
 };
@@ -107,7 +103,7 @@ private:
 class TimerManager{
 
 public:
-    TimerManager(int lifeSpan,int timeSlot):timerList(lifeSpan){
+    TimerManager(int lifeSpan,int timeSlot):list(lifeSpan){
         SignalHandler::init(timeSlot);
     }
     ~TimerManager(){
@@ -115,19 +111,19 @@ public:
     }
         //定时处理任务，重新定时以不断触发SIGALRM信号
     void timerHandler(){
-        timerList.tick();
+        list.tick();
         SignalHandler::setAlarm();
     }
-    int getPipefd1() const { return SignalHandler::getPipefd1(); }
-    int getPipefd0() const { return SignalHandler::getPipefd0(); }
-    void add(int sock) { timerList.add(sock); }
-    void adjust(int sock) { timerList.adjust(sock); }
-    void remove(int sock) { timerList.remove(sock); }
-    bool dealWithSignal(bool &timeout, bool &stop_server) { return SignalHandler::dealWithSignal(timeout, stop_server); }
-    const std::vector<int>& getDeath() const { return timerList.getDeath(); }
+    int getPipeWriteFd() const { return SignalHandler::getPipeWriteFd(); }
+    int getPipeReadFd() const { return SignalHandler::getPipeReadFd(); }
+    void add(int fd) { list.add(fd); }
+    void adjust(int fd) { list.adjust(fd); }
+    void remove(int fd) { list.remove(fd); }
+    void dealWithSignal(bool &timeout, bool &stop_server) { SignalHandler::dealWithSignal(timeout, stop_server); }
+    const std::vector<int>& getDeath() const { return list.getDeath(); }
 
 private:
-    SortedTimerList timerList;
+    SortedTimerList list;
 };
 
 #endif
