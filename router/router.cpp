@@ -109,11 +109,11 @@ Router::Router(const SqlInfo&sqlInfo) :
 void Router:: route(HttpConn* conn){
     if (conn->method == HttpMethod::GET){
         auto it = getRoutes.find(conn->url);
-        if (it != getRoutes.end())
+        if (it != getRoutes.end() )
             it->second(conn);
     }else if (conn->method == HttpMethod::POST){
         auto it = postRoutes.find(conn->url);
-        if (it != postRoutes.end())
+        if (it != postRoutes.end() )
             it->second(conn);
     }
 }
