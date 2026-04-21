@@ -3,6 +3,7 @@
 
 int main()
 {
+
     struct SqlInfo sqlInfo{
         mysql::IP,
         mysql::PORT,
@@ -51,7 +52,6 @@ int main()
             threadPoolInfo,
             logInfo
         );
-    
     //监听
     server.eventListen();
 
