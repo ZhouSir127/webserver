@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include "../consts.h"
+#include "../args.h"
 
 class EpollManager{
 
@@ -25,8 +26,7 @@ public:
     };
     
     //对文件描述符设置非阻塞
-    
-    EpollManager(bool listenET,bool connectET):epollFd(epoll_create1(0)),isListenEt(listenET),isConnectEt(connectET){
+    EpollManager(const EpollInfo& epollInfo):epollFd(epoll_create1(0)),isListenEt(epollInfo.isListenEt),isConnectEt(epollInfo.isConnectEt){
         if (epollFd == -1) {
             exit(EXIT_FAILURE);
         }

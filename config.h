@@ -1,10 +1,12 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
 #include <string>
 #include <cstdint>
 
 namespace webserver{
     const uint16_t PORT = 8080; 
     const bool LISTENET = false;
-    const bool CONNECTET = false;
 }
 
 namespace timer{
@@ -14,12 +16,13 @@ namespace timer{
 
 namespace http{
     const std::string ROOT = "/root/webserver/root";
+    const bool CONNECTET = false;
 }
 
 namespace mysql{
     const std::string IP = "127.0.0.1";
     const int PORT = 3306;
-    const std::string USER = "root" ;
+    const std::string ACCOUNT = "root" ;
     const std::string PASSWORD = "4399";
     const std::string NAME = "webserver_db";
     const int NUM = 8;
@@ -34,3 +37,5 @@ namespace sysLog{
     const std::string FILE = "/var/log/webserver";
     const bool CLOSE = false;
 }
+
+#endif

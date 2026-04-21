@@ -4,9 +4,9 @@
 #include <deque>
 #include <mysql/mysql.h>
 #include <error.h>
-#include <string>
 #include <semaphore.h>
 #include <mutex>
+#include "../args.h"
 
 class ConnectionPool
 {
@@ -15,7 +15,7 @@ public:
 	bool releaseConnection(MYSQL *conn); //释放连接
 	//int getFreeConn();					 //获取连接
 	
-	ConnectionPool(const std::string& url, int port, const std::string&account,const std::string& password,const std:: string& name, int num);
+	ConnectionPool(const SqlInfo& sqlInfo);
 	~ConnectionPool();
 private:
 	std::mutex lock;

@@ -25,6 +25,7 @@
 #include <memory>
 #include <mutex>
 #include "../consts.h"
+#include "../args.h"
 
 class SortedTimerList
 {
@@ -103,8 +104,8 @@ private:
 class TimerManager{
 
 public:
-    TimerManager(int lifeSpan,int timeSlot):list(lifeSpan){
-        SignalHandler::init(timeSlot);
+    TimerManager(const TimerInfo& timerInfo):list(timerInfo.lifeSpan){
+        SignalHandler::init(timerInfo.timeSlot);
     }
     ~TimerManager(){
         SignalHandler::clean();

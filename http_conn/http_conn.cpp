@@ -2,23 +2,17 @@
 
 #include <mysql/mysql.h> 
 #include <algorithm>
-#include <memory>
 #include <cstdlib>
 #include <string>
 #include <sstream>
 #include <filesystem>  
 #include "../consts.h"
 
-std::shared_ptr<mavsdk::Mavsdk> mavsdkPtr = nullptr;
-std::shared_ptr<mavsdk::System> drone = nullptr;
-std::shared_ptr<mavsdk::Action> action = nullptr;
-std::shared_ptr<mavsdk::Telemetry> telemetry = nullptr;
 
 std::unordered_map<int,std::string> HttpConn::form {
     {400,"Your request has bad syntax or is inherently impossible to staisfy.\n"}, 
     {403,"You do not have permission to get file form this server.\n"},
     {404,"The requested file was not found on this server.\n"},
-    //{500,"There was an unusual problem serving the request file.\n"}
 };    
 std::unordered_map<int,std::string> HttpConn::title {
     {200,"OK"},
@@ -233,136 +227,7 @@ HttpCode HttpConn::processRead()
 
 HttpCode HttpConn::doRequest()
 {
-    if(method == HttpMethod::POST){
-        std::string name , password;
-        std::istringstream iss(requestBody);
-        
-        if( !(iss >> name) )
-            return HttpCode::BAD_REQUEST;
-        if( !(iss >> password) )
-            return HttpCode::BAD_REQUEST;
-    
-        if (url[1] == 'r'){    //提交注册
-            if (user.exists(name) ==false){
-                if(user.add(name,password)){
-                    realFilePath = root + "/log.html";
-                    LOG_INFO("User Register Success: %s", name.c_str());
-                }else{
-                    realFilePath = root + "/registerError.html";
-                    LOG_ERROR("User Register Failed (DB Error): %s", name.c_str());
-                }
-            }else{
-                realFilePath = root + "/registerError.html";
-                LOG_ERROR("User Register Failed (User Exists): %s", name.c_str());
-            }
-        }else if ( user.check(name,password) ){
-            realFilePath = root + "/index.html";
-            LOG_INFO("User Login Success: %s", name.c_str());
-        }else{
-            realFilePath = root + "/logError.html";
-            LOG_ERROR("User Login Failed (Wrong password/No user): %s", name.c_str());
-        }
-    }else{
-        if(url.size() == 1)
-            realFilePath = root + "/log.html" ;
-        else
-            switch (url[1]){
-                case 'r'://注册页面
-                    realFilePath = root + "/register.html" ;
-                    break;
-                case 'c':// /1 -> /connect
-                    // 1. 初始化 MAVSDK 并发起连接 (如果还没做的话)
-                    if (!mavsdkPtr) {
-                        mavsdk::Mavsdk::Configuration config(mavsdk::ComponentType::CompanionComputer);
-                        mavsdkPtr = std::make_shared<mavsdk::Mavsdk>(config);
-                        mavsdkPtr->add_any_connection("udp://:14540");
-                        LOG_INFO("正在初始化 MAVSDK 并监听 udp://:14540...");
-                    }
-                    
-                    // 2. 等待并获取无人机系统 (System)
-                    // 由于网络发现需要一点时间，我们加一个简易的轮询等待 (最多等 1.5 秒)
-                    if (!drone) {
-                        bool found = false;
-                        for (int i = 0; i < 15; ++i) { 
-                            if (!mavsdkPtr->systems().empty()) {
-                                drone = mavsdkPtr->systems().at(0); // 获取发现的第一个无人机系统
-                                if (drone->is_connected()) {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            usleep(100000); // 睡 100 毫秒再查
-                        }
-
-                        // 3. 实例化动作和遥测插件！(最关键的一步)
-                        if (found && drone) {
-                            action = std::make_shared<mavsdk::Action>(drone);
-                            telemetry = std::make_shared<mavsdk::Telemetry>(drone);
-                            LOG_INFO("成功连接到无人机系统！Action 和 Telemetry 插件已就绪。");
-                        } else {
-                            drone = nullptr; // 没连上就清空，防止野指针
-                            LOG_ERROR("连接超时：未在 udp://:14540 发现无人机系统。请检查仿真器(SITL)是否运行。");
-                        }
-                    } else
-                        LOG_INFO("无人机系统早已连接，无需重复连接。");
-                    
-                    break;
-                case 'd':// /2 -> /disconnect
-                    action = nullptr;
-                    telemetry = nullptr;
-                    drone = nullptr;
-                    LOG_INFO("无人机连接已断开");
-                    break;
-                case 'C':
-                    // /3 -> connstatus
-                    if (drone) {
-                        bool is_conn = drone->is_connected();
-                        LOG_INFO("连接状态: %d", is_conn);
-                    }
-                    break;
-                case 'a': // /4 -> arm
-                    if (action) action->arm();
-                    break;
-                case 'D': // /5 -> disarm
-                    if (action) action->disarm();
-                    break;
-                case 'm': // /6 -> mode (切换为 hold 模式演示)
-                    if (action) action->hold(); 
-                    break;
-                case 't': // /7 -> takeoff
-                    if (action) action->takeoff();
-                    break;
-                case 'l': // /8 -> land
-                    if (action) action->land();
-                    break;
-                case 'R': // /9 -> rtl
-                    if (action) action->return_to_launch();
-                    break;
-                case 'g': // /10 -> goto
-                    // goto 需要额外的经纬度参数，通常前端发 /10?lat=xx&lon=xx，此处预留
-                    break;
-                case 'p': // /11 -> position
-                    if (telemetry) telemetry->position();
-                    break;
-                case 'v': // /12 -> velocity
-                    if (telemetry) telemetry->velocity_ned();
-                    break;
-                case 'A': // /13 -> attitude
-                    if (telemetry) telemetry->attitude_euler();
-                    break;
-                case 'b': // /14 -> battery
-                    if (telemetry) telemetry->battery();
-                    break;
-                case 'G': // /15 -> gps
-                    if (telemetry) telemetry->gps_info();
-                    break;
-                case 's': // /16 -> state
-                    if (telemetry) telemetry->health();
-                    break;
-                default:  // 👈 加上这行，防止未知路由请求导致异常
-                    return HttpCode::NO_RESOURCE;
-            }
-    }
+    router.route(this);
     if(!realFilePath.empty() ){
         if (!std::filesystem::exists(realFilePath)  ){
             LOG_ERROR("File request Error: NO_RESOURCE (404) for path: %s", realFilePath.c_str());

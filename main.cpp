@@ -3,12 +3,53 @@
 
 int main()
 {
-    WebServer server(webserver::PORT,
-            timer::LIFE_SPAN,timer::TIMESLOT,
-            webserver::LISTENET,webserver::CONNECTET,
-            mysql::IP,mysql::PORT,mysql::USER,mysql::PASSWORD,mysql::NAME,mysql::NUM,http::ROOT,
-            threadPool::NUM, threadPool::MAX_REQUEST,
-            sysLog::FILE,sysLog::CLOSE        
+    struct SqlInfo sqlInfo{
+        mysql::IP,
+        mysql::PORT,
+        mysql::ACCOUNT,
+        mysql::PASSWORD,
+        mysql::NAME,
+        mysql::NUM
+    };
+    
+    struct HttpInfo httpInfo{
+        http::CONNECTET,
+        http::ROOT
+    };
+
+    struct TimerInfo timerInfo{
+        timer::LIFE_SPAN,
+        timer::TIMESLOT
+    };
+
+    struct EpollInfo epollInfo{
+        webserver::LISTENET,
+        http::CONNECTET
+    };
+
+    struct ServerInfo ServerInfo{
+        webserver::PORT,
+        webserver::LISTENET,
+        
+    };
+
+    struct ThreadPoolInfo threadPoolInfo{
+        threadPool::NUM,
+        threadPool::MAX_REQUEST
+    };
+
+    struct LogInfo logInfo{
+        sysLog::FILE,
+        sysLog::CLOSE
+    };
+
+    WebServer server(
+            ServerInfo,
+            epollInfo,
+            timerInfo,
+            httpInfo,sqlInfo,
+            threadPoolInfo,
+            logInfo
         );
     
     //监听

@@ -29,19 +29,8 @@
 #include <utility>   
 #include <cstdio>  
 
-#include <mavsdk/mavsdk.h>
-#include <mavsdk/system.h>
-
-#include <mavsdk/plugin_base.h>
-#include <mavsdk/plugins/action/action.h>
-#include <mavsdk/plugins/telemetry/telemetry.h>
-
-#include "../user/user.h"
-
-extern std::shared_ptr<mavsdk::Mavsdk> mavsdkPtr;
-extern std::shared_ptr<mavsdk::System> drone;
-extern std::shared_ptr<mavsdk::Action> action;
-extern std::shared_ptr<mavsdk::Telemetry> telemetry;
+#include "../router/router.h"
+#include "../args.h"
 
 enum class HttpMethod
 {
@@ -76,6 +65,7 @@ enum class HttpCode
 class HttpConn
 {
 private:
+    friend class Router;
     static std::unordered_map<int,std::string> form ;
     static std::unordered_map<int,std::string> title;
 
@@ -122,7 +112,7 @@ private:
     size_t contentLength;
     std::string requestBody;
 
-    User& user; 
+    Router &router;
     const std::string&root;
     std::string realFilePath;
 
@@ -138,11 +128,11 @@ private:
     size_t fileSize;   // 专门记录文件大小
 
 public:
-    HttpConn(bool connectET,int fd,User&user,const std::string&root)
+    HttpConn(bool connectET,int fd,Router&router,const std::string&root)
     :isConnectEt(connectET),fd(fd),
     readBuffer(1024,'\0'),readIdx(0),checkedIdx(0),startIdx(0),
     checkState(CheckState::CHECK_STATE_REQUESTLINE),method(HttpMethod::GET),isLinger(false),contentLength(0),
-    user(user),root(root),
+    router(router),root(root),
     bytesToSend(0),bytesHaveSent(0),ioVectorCount(1),ioVectorIdx(0),fileAddress(nullptr),fileSize(0)
     {}
     ~HttpConn(){
@@ -158,25 +148,26 @@ public:
     bool getLinger() const { return isLinger;}
 };
 
-class Http{
+
+class HttpManager{
 
 private:
 
 bool isConnectEt;
 std::vector<std::unique_ptr<HttpConn> > fdToConn;
-User user;
+Router router;
 const std::string&root;
 
 public:
-    Http(bool isConnectEt,const std::string&IP,int port,const std::string& account, const std::string& password, const std::string& name, int num,const std::string&root)
-    :isConnectEt(isConnectEt),
+    HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo)
+    :isConnectEt(httpInfo.isConnectEt),
     fdToConn(1+consts::MAX_FD),
-    user(IP,port,account,password,name,num),
-    root(root)
+    router(sqlInfo),
+    root(httpInfo.root)
     {}
     
     void add(int fd){
-        fdToConn[fd]=std::make_unique<HttpConn>(isConnectEt,fd,user,root);
+        fdToConn[fd]=std::make_unique<HttpConn>(isConnectEt,fd,router,root);
     }    
     //关闭连接，关闭一个连接，客户总量减一
     void remove(int fd){

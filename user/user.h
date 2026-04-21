@@ -5,6 +5,7 @@
 #include "../connection_pool/connection_pool.h"
 #include <mysql/mysql.h>
 #include "../log/log.h"
+#include "../args.h"
 
 class User{
 
@@ -13,8 +14,8 @@ private:
     std::mutex lock;
     ConnectionPool connPool;
 public:
-    User(const std::string&IP,int port,const std::string& account, const std::string& password, const std::string& name, int num)
-    :connPool(IP,port,account,password,name,num){
+    User(const SqlInfo& sqlInfo)
+    :connPool(sqlInfo){
         MYSQL *mysql = nullptr;
         connectionRAII mysqlcon(mysql,&connPool);
     

@@ -5,12 +5,11 @@
 #include <pthread.h>
 #include "../log/log.h"
 
-ConnectionPool::ConnectionPool(const std::string& url, int port, const std::string& account, const std::string& password, const std::string& name, int num)
+ConnectionPool::ConnectionPool(const SqlInfo& sqlInfo)
 {
-	sem_init(&reserve, 0, num);
+	sem_init(&reserve, 0, sqlInfo.num);
 
-	for (int i = 0; i < num; i++)
-	{
+	for (int i = 0; i < sqlInfo.num; i++){
 		MYSQL *con = mysql_init(nullptr);
 
 		if (!con){
@@ -18,15 +17,15 @@ ConnectionPool::ConnectionPool(const std::string& url, int port, const std::stri
 			exit(1);
 		}
 
-		con = mysql_real_connect(con, url.c_str(), account.c_str(), password.c_str(), name.c_str(), port, nullptr , 0);
+		con = mysql_real_connect(con, sqlInfo.IP.c_str(), sqlInfo.account.c_str(), sqlInfo.password.c_str(), sqlInfo.name.c_str(), sqlInfo.port, nullptr , 0);
 
 		if (!con){
-			LOG_ERROR("MySQL Error: mysql_real_connect failed for User: %s", account.c_str());
+			LOG_ERROR("MySQL Error: mysql_real_connect failed for User: %s", sqlInfo.account.c_str());
 			exit(1);
 		}
 		connQueue.push_back(con);
 	}
-	LOG_INFO("MySQL Connection Pool initialized successfully with %d connections", num);
+	LOG_INFO("MySQL Connection Pool initialized successfully with %d connections", sqlInfo.num);
 }
 
 //当有请求时，从数据库连接池中返回一个可用连接，更新使用和空闲连接数

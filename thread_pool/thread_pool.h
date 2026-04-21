@@ -13,12 +13,13 @@
 
 #include "../epoll_manager/epoll_manager.h"
 #include "../timer_manager/timer_manager.h"
+#include "../args.h"
 
 class ThreadPool
 {
 public:
-    ThreadPool(EpollManager&epollManager,TimerManager&timerManager,Http&http,int threadNumber,int maxRequest) 
-    :epollManager(epollManager),timerManager(timerManager),http(http),threadNumber(threadNumber),maxRequest(maxRequest){
+    ThreadPool(EpollManager&epollManager,TimerManager&timerManager,HttpManager&http,const ThreadPoolInfo& threadPoolInfo) 
+    :epollManager(epollManager),timerManager(timerManager),http(http),threadNumber(threadPoolInfo.threadNum),maxRequest(threadPoolInfo.maxRequest){
         if (threadNumber <= 0 || maxRequest <= 0) 
             throw std::invalid_argument("Invalid thread pool parameters");
         
@@ -44,7 +45,7 @@ private:
 
     EpollManager&epollManager;
     TimerManager&timerManager;
-    Http&http;
+    HttpManager&http;
 
     int threadNumber;        //线程池中的线程数
     size_t maxRequest;

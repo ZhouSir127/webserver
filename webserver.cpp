@@ -1,21 +1,24 @@
 #include "webserver.h"
 #include "epoll_manager/epoll_manager.h"
 
-WebServer::WebServer(uint16_t port,
-                bool listenET,bool connectET,  
-                int lifeSpan,int timeSlot,
-                const std::string&IP,int sqlport,const std::string& user, const std::string& passWord, const std::string& databaseName, int sql_num,const std::string&root,
-                int thread_num,int max_request,
-                const std::string& file_name,bool close_log 
+
+WebServer::WebServer(
+                const ServerInfo& serverInfo,  
+                const EpollInfo& epollInfo,
+                const TimerInfo& timerInfo,
+                const HttpInfo& httpInfo,
+                const SqlInfo& sqlInfo,
+                const ThreadPoolInfo& threadPoolInfo,
+                const LogInfo& logInfo
             )
-:port(port),
-isListenEt(listenET),
-epollManager(listenET,connectET),
-timerManager(lifeSpan,timeSlot),
-http(connectET, IP, sqlport,user, passWord, databaseName,sql_num,root),
-threadPool(epollManager,timerManager,http,thread_num,max_request)
+:port(serverInfo.port),
+isListenEt(serverInfo.isListenEt),
+epollManager(epollInfo),
+timerManager(timerInfo),
+httpManager(httpInfo,sqlInfo),
+threadPool(epollManager,timerManager,httpManager,threadPoolInfo)
 {
-    Log::init(file_name,close_log);
+    Log::init(logInfo.file,logInfo.close);
 }
 
 WebServer::~WebServer()
@@ -85,7 +88,7 @@ bool WebServer::dealClientData()
         
         epollManager.add(connfd,EpollManager::FdType::CONNECTION);
         timerManager.add(connfd);
-        http.add(connfd);
+        httpManager.add(connfd);
     }
     else
         while (1)
@@ -105,7 +108,7 @@ bool WebServer::dealClientData()
             }
             epollManager.add(connfd,EpollManager::FdType::CONNECTION);
             timerManager.add(connfd);
-            http.add(connfd);
+            httpManager.add(connfd);
         }
     return true;
 }
@@ -149,7 +152,7 @@ void WebServer::eventLoop()
             else{    
                 epollManager.remove(event.data.fd);
                 timerManager.remove(event.data.fd);
-                http.remove(event.data.fd);
+                httpManager.remove(event.data.fd);
                 close(event.data.fd);
             }
         }
@@ -159,7 +162,7 @@ void WebServer::eventLoop()
             
             for(int fd : timerManager.getDeath() ){
                 epollManager.remove(fd);
-                http.remove(fd);
+                httpManager.remove(fd);
                 close(fd);
 
                 LOG_INFO("close fd %d", fd);

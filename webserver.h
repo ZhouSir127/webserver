@@ -8,27 +8,28 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <cassert>
-#include <string>
-
 #include "epoll_manager/epoll_manager.h"
 #include "timer_manager/timer_manager.h"
 #include "http_conn/http_conn.h"
 #include "thread_pool/thread_pool.h"
+#include "args.h"
 
 class WebServer
 {
 public:
-WebServer(uint16_t port,
-        bool listenET,bool connectET,
-        int lifeSpan,int timeSlot,
-        const std::string&IP,int sqlport,const std::string& user, const std::string& passWord, const std::string& databaseName, int sql_num, const std::string&root,
-        int thread_num,int max_request,
-        const std::string& file_name,bool close_log
+WebServer(
+        const ServerInfo& serverInfo,
+        const EpollInfo& epollInfo,
+        const TimerInfo& timerInfo,
+        const HttpInfo& httpInfo,
+        const SqlInfo& sqlInfo,
+        const ThreadPoolInfo& threadPoolInfo,
+        const LogInfo& logInfo
         );
     ~WebServer();
     void eventListen();
     void eventLoop();
-
+    
 private:
     
     bool dealClientData();
@@ -39,10 +40,7 @@ private:
 
     EpollManager epollManager;
     TimerManager timerManager;
-    Http http;
-
-    
-    
+    HttpManager httpManager;
     ThreadPool threadPool;
 };
 #endif
