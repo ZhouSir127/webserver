@@ -34,8 +34,8 @@ struct ServerInfo{
 };
 
 struct ThreadPoolInfo{
-    int threadNum;
-    int maxRequest;
+    size_t threadNumer;
+    size_t maxRequest;
 };
 
 struct LogInfo{

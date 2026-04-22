@@ -211,12 +211,12 @@ HttpCode HttpConn::processRead()
             
             return HttpCode::NO_REQUEST;
         }else{
-            HttpCode ret = parseLine();
+            ret = parseLine();
             if (ret != HttpCode::GET_REQUEST )
                 return ret;
             
             if(checkState == CheckState::CHECK_STATE_REQUESTLINE ){
-                HttpCode ret = parseRequestLine();
+                ret = parseRequestLine();
                 if ( ret != HttpCode::GET_REQUEST)
                     return ret;
             }else if (parseHeaders() == HttpCode::BAD_REQUEST)

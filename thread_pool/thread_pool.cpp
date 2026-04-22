@@ -32,11 +32,11 @@ void ThreadPool::run()
 
 
         if ( !isEpollOut )
-            switch(http.process(fd) ){//读处理后，无需响应直接关
+            switch(httpManager.process(fd) ){//读处理后，无需响应直接关
                 case HttpCode::CLOSED_CONNECTION:
                     epollManager.remove(fd);
                     timerManager.remove(fd);
-                    http.remove(fd);
+                    httpManager.remove(fd);
                     close(fd);
                     break;
                 case HttpCode::NO_REQUEST://继续读
@@ -55,19 +55,19 @@ void ThreadPool::run()
                     break;
             }            
         else{
-            HttpCode ret = http.write(fd) ;
+            HttpCode ret = httpManager.write(fd) ;
     
             if ( ret == HttpCode::NO_REQUEST ){//继续写
                 epollManager.modify(fd,EPOLLOUT);
                 timerManager.adjust(fd);
-            }else if ( ret == HttpCode::GET_REQUEST && http.getLinger(fd) ){
+            }else if ( ret == HttpCode::GET_REQUEST && httpManager.getLinger(fd) ){
                 epollManager.modify(fd,EPOLLIN);
                 timerManager.adjust(fd);
-                http.init(fd);
+                httpManager.init(fd);
             }else{
                 epollManager.remove(fd);
                 timerManager.remove(fd);
-                http.remove(fd);
+                httpManager.remove(fd);
                 close(fd);
             }
         }

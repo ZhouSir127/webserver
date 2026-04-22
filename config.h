@@ -10,7 +10,7 @@ namespace webserver{
 }
 
 namespace timer{
-    const int LIFE_SPAN = 3600; 
+    const int LIFE_SPAN = 3600;
     const unsigned int TIMESLOT = 5;
 }
 
@@ -29,8 +29,8 @@ namespace mysql{
 }
 
 namespace threadPool{
-    const int NUM = 8;
-    const int MAX_REQUEST = 10000;
+    const size_t NUM = 8;
+    const size_t MAX_REQUEST = 10000;
 }
 
 namespace sysLog{

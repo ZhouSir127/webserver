@@ -67,8 +67,7 @@ bool WebServer::dealClientData()
     if (isListenEt == false)
     {
         int connfd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength);
-        if (connfd < 0)
-        {
+        if (connfd < 0){
             LOG_ERROR("%s:errno is:%d", "accept error", errno);
             return false;
         }
@@ -93,22 +92,22 @@ bool WebServer::dealClientData()
     else
         while (1)
         {
-            int connfd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength);
-            if (connfd < 0)
+            int fd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength);
+            if (fd < 0)
                 break;
-            if ( connfd > consts::MAX_FD)
+            if ( fd > consts::MAX_FD)
             {
                 const char *info = "Internal server busy";
-                send(connfd, info, strlen(info), 0);
+                send(fd, info, strlen(info), 0);
                 
-                close(connfd);
+                close(fd);
 
                 LOG_ERROR("%s", "Internal server busy");
                 return false;
             }
-            epollManager.add(connfd,EpollManager::FdType::CONNECTION);
-            timerManager.add(connfd);
-            httpManager.add(connfd);
+            epollManager.add(fd,EpollManager::FdType::CONNECTION);
+            timerManager.add(fd);
+            httpManager.add(fd);
         }
     return true;
 }

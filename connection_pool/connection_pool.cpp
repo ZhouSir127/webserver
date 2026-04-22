@@ -13,7 +13,7 @@ ConnectionPool::ConnectionPool(const SqlInfo& sqlInfo)
 		MYSQL *con = mysql_init(nullptr);
 
 		if (!con){
-			LOG_ERROR("MySQL Error: mysql_init failed");
+			LOG_ERROR("MySQL Error: mysql_init failed",nullptr);
 			exit(1);
 		}
 

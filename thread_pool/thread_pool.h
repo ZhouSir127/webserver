@@ -18,15 +18,15 @@
 class ThreadPool
 {
 public:
-    ThreadPool(EpollManager&epollManager,TimerManager&timerManager,HttpManager&http,const ThreadPoolInfo& threadPoolInfo) 
-    :epollManager(epollManager),timerManager(timerManager),http(http),threadNumber(threadPoolInfo.threadNum),maxRequest(threadPoolInfo.maxRequest){
+    ThreadPool(EpollManager&epollManager,TimerManager&timerManager,HttpManager&httpManager,const ThreadPoolInfo& threadPoolInfo) 
+    :epollManager(epollManager),timerManager(timerManager),httpManager(httpManager),threadNumber(threadPoolInfo.threadNumer),maxRequest(threadPoolInfo.maxRequest){
         if (threadNumber <= 0 || maxRequest <= 0) 
             throw std::invalid_argument("Invalid thread pool parameters");
         
         if (sem_init(&sem, 0, 0) != 0)
             throw std::runtime_error("Semaphore initialization failed");
         
-        for (int i = 0; i < threadNumber; ++i) {
+        for (size_t i = 0; i < threadNumber; ++i) {
         // 直接绑定成员函数，无需 static 转换
             threads.emplace_back(&ThreadPool::run ,this);
             threads.back().detach();
@@ -45,12 +45,12 @@ private:
 
     EpollManager&epollManager;
     TimerManager&timerManager;
-    HttpManager&http;
+    HttpManager&httpManager;
 
-    int threadNumber;        //线程池中的线程数
+    size_t threadNumber;        //线程池中的线程数
     size_t maxRequest;
     std::vector<std::thread> threads;       //描述线程池的数组，其大小为m_thread_number
-    std::queue<std::pair<int,bool> > workQueue; //请求队列
+    std::queue<std::pair<size_t,bool> > workQueue; //请求队列
     std::mutex queueLocker;       //保护请求队列的互斥锁
     sem_t sem;             //是否有任务需要处理
 };

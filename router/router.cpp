@@ -8,12 +8,12 @@ Router::Router(const SqlInfo&sqlInfo) :
     getRoutes{
         {"/", [](HttpConn* conn) ->void { conn->realFilePath = conn->root + "/log.html" ; }},
         {"/register", [](HttpConn* conn) ->void { conn->realFilePath = conn->root + "/register.html" ; }},
-        {"/connect",[&](HttpConn* conn) ->void { 
+        {"/connect",[&](HttpConn*) ->void { 
                         if (!mavsdkPtr) {
                             mavsdk::Mavsdk::Configuration config(mavsdk::ComponentType::CompanionComputer);
                             mavsdkPtr = std::make_shared<mavsdk::Mavsdk>(config);
                             mavsdkPtr->add_any_connection("udp://:14540");
-                            LOG_INFO("正在初始化 MAVSDK 并监听 udp://:14540...");
+                            LOG_INFO("正在初始化 MAVSDK 并监听 udp://:14540...",nullptr);
                         }     
                         // 2. 等待并获取无人机系统 (System)
                         // 由于网络发现需要一点时间，我们加一个简易的轮询等待 (最多等 1.5 秒)
@@ -34,41 +34,41 @@ Router::Router(const SqlInfo&sqlInfo) :
                             if (found && drone) {
                                 action = std::make_shared<mavsdk::Action>(drone);
                                 telemetry = std::make_shared<mavsdk::Telemetry>(drone);
-                                LOG_INFO("成功连接到无人机系统！Action 和 Telemetry 插件已就绪。");
+                                LOG_INFO("成功连接到无人机系统！Action 和 Telemetry 插件已就绪。", nullptr);
                             } else {
                                 drone = nullptr; // 没连上就清空，防止野指针
-                                LOG_ERROR("连接超时：未在 udp://:14540 发现无人机系统。请检查仿真器(SITL)是否运行。");
+                                LOG_ERROR("连接超时：未在 udp://:14540 发现无人机系统。请检查仿真器(SITL)是否运行。", nullptr);
                             }
                         } else
-                            LOG_INFO("无人机系统早已连接，无需重复连接。");
+                            LOG_INFO("无人机系统早已连接，无需重复连接。",nullptr);
                     }
         },
-        {"/disconnect",[&](HttpConn* conn) ->void { 
+        {"/disconnect",[&](HttpConn*) ->void { 
                         action = nullptr;
                         telemetry = nullptr;
                         drone = nullptr;
-                        LOG_INFO("无人机连接已断开");
+                        LOG_INFO("无人机连接已断开", nullptr);
                     }
         },
-        {"/connstatus",[&](HttpConn* conn) ->void {
+        {"/connstatus",[&](HttpConn*) ->void {
                         if (drone) {
                             bool is_conn = drone->is_connected();
                             LOG_INFO("连接状态: %d", is_conn);
                         }
                     }
         },
-        {"/arm",[&](HttpConn* conn) ->void { if (action) action->arm();} },
-        {"/disarm",[&](HttpConn* conn) ->void { if (action) action->disarm(); } },
-        {"/hold",[&](HttpConn* conn) ->void { if (action) action->hold(); } },
-        {"/takeoff",[&](HttpConn* conn) ->void { if (action) action->takeoff(); } },
-        {"/land",[&](HttpConn* conn) ->void { if (action) action->land(); } },
-        {"/rtl",[&](HttpConn* conn) ->void { if (action) action->return_to_launch(); } },
-        {"/position",[&](HttpConn* conn) ->void { if (telemetry) telemetry->position(); } },
-        {"/velocity",[&](HttpConn* conn) ->void { if (telemetry) telemetry->velocity_ned(); } },
-        {"/attitude",[&](HttpConn* conn) ->void { if (telemetry) telemetry->attitude_euler(); } },
-        {"/battery",[&](HttpConn* conn) ->void { if (telemetry) telemetry->battery(); } },
-        {"/gps",[&](HttpConn* conn) ->void { if (telemetry) telemetry->gps_info(); } },
-        {"/state",[&](HttpConn* conn) ->void { if (telemetry) telemetry->health(); } }
+        {"/arm",[&](HttpConn*) ->void { if (action) action->arm();} },
+        {"/disarm",[&](HttpConn*) ->void { if (action) action->disarm(); } },
+        {"/hold",[&](HttpConn*) ->void { if (action) action->hold(); } },
+        {"/takeoff",[&](HttpConn*) ->void { if (action) action->takeoff(); } },
+        {"/land",[&](HttpConn*) ->void { if (action) action->land(); } },
+        {"/rtl",[&](HttpConn*) ->void { if (action) action->return_to_launch(); } },
+        {"/position",[&](HttpConn*) ->void { if (telemetry) telemetry->position(); } },
+        {"/velocity",[&](HttpConn*) ->void { if (telemetry) telemetry->velocity_ned(); } },
+        {"/attitude",[&](HttpConn*) ->void { if (telemetry) telemetry->attitude_euler(); } },
+        {"/battery",[&](HttpConn*) ->void { if (telemetry) telemetry->battery(); } },
+        {"/gps",[&](HttpConn*) ->void { if (telemetry) telemetry->gps_info(); } },
+        {"/state",[&](HttpConn*) ->void { if (telemetry) telemetry->health(); } }
     },
     postRoutes{
         {"/register",[&](HttpConn* conn) ->void { 

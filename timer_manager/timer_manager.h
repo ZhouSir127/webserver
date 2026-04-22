@@ -78,9 +78,8 @@ public:
 
     static void init(unsigned int slot){
         timeSlot = slot;
-        int ret = socketpair(PF_UNIX, SOCK_STREAM, 0, pipefd);
-        assert(ret != -1);
-
+        socketpair(PF_UNIX, SOCK_STREAM, 0, pipefd);
+    
         addSig(SIGPIPE, SIG_IGN);
         addSig(SIGALRM, sigHandler);
         addSig(SIGTERM, sigHandler);
