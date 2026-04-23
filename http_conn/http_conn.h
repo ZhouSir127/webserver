@@ -166,27 +166,27 @@ public:
     root(httpInfo.root)
     {}
     
-    void add(size_t fd){
+    void add(int fd){
         fdToConn[fd]=std::make_unique<HttpConn>(isConnectEt,fd,router,root);
     }    
     //关闭连接，关闭一个连接，客户总量减一
-    void remove(size_t fd){
+    void remove(int fd){
         fdToConn[fd].reset();
     }
 
-    HttpCode process(size_t fd){
+    HttpCode process(int fd){
         return fdToConn[fd]->process();
     } 
 
-    HttpCode write(size_t fd){
+    HttpCode write(int fd){
         return fdToConn[fd]->write();
     }
 
-    bool getLinger(size_t fd){
+    bool getLinger(int fd){
         return fdToConn[fd]->getLinger();
     }
 
-    void init(size_t fd){
+    void init(int fd){
         fdToConn[fd]->init();
     }
 };

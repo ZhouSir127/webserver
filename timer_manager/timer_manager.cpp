@@ -5,84 +5,114 @@
 #include <sys/types.h>
 #include <cstring>
 #include "../log/log.h"
+#include <algorithm>
 
-void SortedTimerList::add(int fd)
+bool TimerMinHeap::keep(size_t idx){
+    size_t leftIdx((idx<<1)+1);
+    
+    if (leftIdx >= size ) 
+        return false;
+
+    time_t leftExpire = fdToExpireIdx[heap[leftIdx]].first;
+    time_t expire = fdToExpireIdx[heap[idx] ].first;
+    size_t rightIdx(leftIdx + 1);
+
+    if(rightIdx >= size){
+        if(leftExpire < expire ){
+            std::swap(heap[idx], heap[leftIdx]);
+
+            fdToExpireIdx[heap[idx]].second = idx;
+            fdToExpireIdx[heap[leftIdx]].second = leftIdx;
+            keep(leftIdx);
+            return true;
+        }
+    }else{
+        time_t rightExpire = fdToExpireIdx[heap[rightIdx]].first;
+
+        if ( leftExpire < expire || rightExpire < expire )
+        {
+            size_t swapIdx = leftExpire < rightExpire ? leftIdx : rightIdx;
+
+            std::swap(heap[idx], heap[swapIdx]);
+
+            fdToExpireIdx[heap[idx]].second = idx;
+            fdToExpireIdx[heap[swapIdx]].second = swapIdx;
+            keep(swapIdx);
+            return true;
+        }
+    }
+    return false;
+}
+
+void TimerMinHeap::pop(){
+    fdToExpireIdx[heap[0]] = {-1,-1};
+    
+    if(--size > 0){
+        heap[0] = heap[size];
+        fdToExpireIdx[heap[0]].second = 0;    
+        keep(0);
+    }
+}
+
+void TimerMinHeap::add(int fd)
 {
     std::unique_lock<std::mutex>Lock(lock);
-
-    std::shared_ptr<Node> node = std::make_shared<Node> (time(nullptr)+lifeSpan,fd);
-
-    node->next=tail;
-    node->prev=tail->prev;
-
-    std::shared_ptr<Node> next = node -> next.lock();
-    std::shared_ptr<Node> prev = node -> prev.lock();
-
-    next->prev=node;
-    prev->next=node;
-        
-    fdToNode[fd]=node;
+    fdToExpireIdx[fd] = {time(nullptr)+lifeSpan, size};
+    heap[size++] = fd;
 }
 
-void SortedTimerList::adjust(int fd){
+void TimerMinHeap::adjust(int fd){
     std::unique_lock<std::mutex>Lock(lock);
 
-    std::shared_ptr<Node>&timer = fdToNode[fd];
-    timer->expire=time(nullptr)+lifeSpan;
-
-    if( timer != tail->prev.lock() ){    
+    fdToExpireIdx[fd].first = time(nullptr)+lifeSpan;
     
-        std::shared_ptr<Node> next = timer -> next.lock();
-        std::shared_ptr<Node> prev = timer -> prev.lock();
-
-        next->prev=prev;
-        prev->next=next;
-        
-        timer->next=tail;
-        timer->prev=tail->prev;
-        
-        std::shared_ptr<Node> Next = timer -> next.lock();
-        std::shared_ptr<Node> Prev = timer -> prev.lock();
-
-        Next->prev=timer;
-        Prev->next=timer;
-    }
-    
+    keep(fdToExpireIdx[fd].second);    
 }
 
-void SortedTimerList::remove(int fd)
+void TimerMinHeap::remove(int fd)
 {    
     std::unique_lock<std::mutex>Lock(lock);
 
-    std::shared_ptr<Node> &timer = fdToNode[fd];
+    if(fdToExpireIdx[fd].second == size-1){
+        fdToExpireIdx[fd] = {-1,-1};
+        --size;
+        return;
+    }
 
-    std::shared_ptr<Node> next = timer -> next.lock();
-    std::shared_ptr<Node> prev = timer -> prev.lock();
-
-    prev->next=next;
-    next->prev=prev;
+    size_t idx = fdToExpireIdx[fd].second;
+    heap [idx] = heap[size - 1];
+    fdToExpireIdx[heap[idx]].second = idx;
+    --size;
     
-    timer.reset();
+    fdToExpireIdx[fd] = {-1,-1};
+    
+    if (!keep(idx) )
+    for(int parent = (idx-1)>>1; parent >= 0; idx = parent, parent = (parent-1)>>1){
+        if(fdToExpireIdx[heap[parent] ].first > fdToExpireIdx[heap[idx] ].first ){
+            std::swap(heap[parent], heap[idx]);
+            fdToExpireIdx[heap[parent]].second = parent;
+            fdToExpireIdx[heap[idx]].second = idx;
+        }else 
+            break;
+    }    
 }
 
-void SortedTimerList::tick()
+void TimerMinHeap::tick()
 {
     std::unique_lock<std::mutex>Lock(lock);
 
-    std::shared_ptr<Node> end = head -> next.lock();
     time_t now=time(nullptr);
     
     death.clear();
-
-    while( end!=tail && end->expire <= now){
-        death.push_back(end->fd);
-        fdToNode[end->fd].reset();
-        end=end->next.lock();
-        LOG_INFO("Connection timeout, fd: %d. Marking for removal.", end->fd);
+    while (size > 0)
+    {
+        int fd = heap[0];
+        if (fdToExpireIdx[fd].first > now)
+            break;
+        
+        death.push_back(fd);
+        pop();
     }
-
-    end->prev = head;
-    head->next = end;
 }
 
 unsigned int SignalHandler::timeSlot;

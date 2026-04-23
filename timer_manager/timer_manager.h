@@ -22,46 +22,32 @@
 #include <time.h>
 
 #include <vector>
-#include <memory>
 #include <mutex>
+//#include <pair.h>
 #include "../consts.h"
 #include "../args.h"
 
-class SortedTimerList
+class TimerMinHeap
 {
 private:
-
-    struct Node{    
-        Node():expire(0),fd(-1){}
-        Node(time_t expire,int fd):expire(expire),fd(fd){}
-        
-        time_t expire;
-        int fd;
-        
-        std::weak_ptr<Node>prev;
-        std::weak_ptr<Node>next;
-    };
-
     std::mutex lock;
     time_t lifeSpan;
-    std::shared_ptr<Node> head;
-    std::shared_ptr<Node> tail;
-    std::vector<std::shared_ptr<Node> > fdToNode;    
+    std::vector<std::pair<time_t, size_t> > fdToExpireIdx;//{死期，在堆索引}    
     std::vector<int> death;
+    size_t size;
+    std::vector<int>heap;
+    bool keep(size_t idx);
+    void pop();
 
 public:
-    SortedTimerList(time_t lifeSpan):lifeSpan(lifeSpan),head(std::make_shared<Node>()),tail(std::make_shared<Node>()),fdToNode(consts::MAX_FD+1){
-        head->next=tail;
-        tail->prev=head;
-    }
+    TimerMinHeap(time_t lifeSpan):lifeSpan(lifeSpan),fdToExpireIdx(consts::MAX_FD+1,{-1,-1} ),size(0),heap(consts::MAX_FD+1,-1){}
     
     void add(int fd);
     void adjust(int fd);
     void remove(int fd);
     void tick();
     const std::vector<int>& getDeath() const { return death; }
-    
-    //bool exist(int fd)const { return (bool)users[fd];}
+
 };
 
 
@@ -103,7 +89,7 @@ private:
 class TimerManager{
 
 public:
-    TimerManager(const TimerInfo& timerInfo):list(timerInfo.lifeSpan){
+    TimerManager(const TimerInfo& timerInfo):heap(timerInfo.lifeSpan){
         SignalHandler::init(timerInfo.timeSlot);
     }
     ~TimerManager(){
@@ -111,19 +97,19 @@ public:
     }
         //定时处理任务，重新定时以不断触发SIGALRM信号
     void timerHandler(){
-        list.tick();
+        heap.tick();
         SignalHandler::setAlarm();
     }
     int getPipeWriteFd() const { return SignalHandler::getPipeWriteFd(); }
     int getPipeReadFd() const { return SignalHandler::getPipeReadFd(); }
-    void add(int fd) { list.add(fd); }
-    void adjust(int fd) { list.adjust(fd); }
-    void remove(int fd) { list.remove(fd); }
+    void add(int fd) { heap.add(fd); }
+    void adjust(int fd) { heap.adjust(fd); }
+    void remove(int fd) { heap.remove(fd); }
     void dealWithSignal(bool &timeout, bool &stop_server) { SignalHandler::dealWithSignal(timeout, stop_server); }
-    const std::vector<int>& getDeath() const { return list.getDeath(); }
+    const std::vector<int>& getDeath() const { return heap.getDeath(); }
 
 private:
-    SortedTimerList list;
+    TimerMinHeap heap;
 };
 
 #endif

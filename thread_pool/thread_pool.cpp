@@ -9,27 +9,29 @@ bool ThreadPool::append(int fd, bool isEpollOut)
     
     workQueue.push({fd,isEpollOut} );
         
-    return sem_post(&sem)==0;
+    cv.notify_one();
+
+    return true;
 }
 
 void ThreadPool::run()
 {
     while (true)
     {
-        sem_wait(&sem);
         int fd;
         bool isEpollOut;
-
         {
         std::unique_lock<std::mutex> lock(queueLocker);
-        if (workQueue.empty()) continue;
-        
+        cv.wait(lock, [this]() -> bool { return !workQueue.empty() || stop; });
+
+        if (stop && workQueue.empty())
+            return;
+
         fd = workQueue.front().first;
         isEpollOut = workQueue.front().second;
         
         workQueue.pop();
         }
-
 
         if ( !isEpollOut )
             switch(httpManager.process(fd) ){//读处理后，无需响应直接关
@@ -54,8 +56,8 @@ void ThreadPool::run()
                 default: // 满足 -Wswitch-default，处理预料之外的情况
                     break;
             }            
-        else{
-            HttpCode ret = httpManager.write(fd) ;
+        else{ 
+            HttpCode ret = httpManager.write(fd);
     
             if ( ret == HttpCode::NO_REQUEST ){//继续写
                 epollManager.modify(fd,EPOLLOUT);

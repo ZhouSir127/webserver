@@ -9,7 +9,7 @@
 #include <mavsdk/plugin_base.h>
 #include <mavsdk/plugins/action/action.h>
 #include <mavsdk/plugins/telemetry/telemetry.h>
-
+#include <mutex>
 #include "../user/user.h"
 #include "../args.h"
 
@@ -25,9 +25,9 @@ private:
     std::shared_ptr<mavsdk::System> drone;
     std::shared_ptr<mavsdk::Action> action;
     std::shared_ptr<mavsdk::Telemetry> telemetry;
-
     std::unordered_map<std::string,HttpHandler> getRoutes;
     std::unordered_map<std::string,HttpHandler> postRoutes;
+    std::mutex lock;
 public:
     Router(const SqlInfo&);
     void route(HttpConn* conn);

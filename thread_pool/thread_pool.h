@@ -1,11 +1,10 @@
 #ifndef THREAD_POOL_H
 #define THREAD_POOL_H
 #include <queue>
-//#include <exception>
 #include <thread>
 #include <vector>
 #include <mutex>
-#include <semaphore.h>
+#include <condition_variable>
 
 #include "../http_conn/http_conn.h"
 #include "../timer_manager/timer_manager.h"
@@ -19,31 +18,32 @@ class ThreadPool
 {
 public:
     ThreadPool(EpollManager&epollManager,TimerManager&timerManager,HttpManager&httpManager,const ThreadPoolInfo& threadPoolInfo) 
-    :epollManager(epollManager),timerManager(timerManager),httpManager(httpManager),threadNumber(threadPoolInfo.threadNumer),maxRequest(threadPoolInfo.maxRequest){
+    :epollManager(epollManager),timerManager(timerManager),httpManager(httpManager),threadNumber(threadPoolInfo.threadNumer),maxRequest(threadPoolInfo.maxRequest),stop(false){
         if (threadNumber <= 0 || maxRequest <= 0) 
             throw std::invalid_argument("Invalid thread pool parameters");
-        
-        if (sem_init(&sem, 0, 0) != 0)
-            throw std::runtime_error("Semaphore initialization failed");
-        
-        for (size_t i = 0; i < threadNumber; ++i) {
-        // 直接绑定成员函数，无需 static 转换
+            
+        for (size_t i = 0; i < threadNumber; ++i)
             threads.emplace_back(&ThreadPool::run ,this);
-            threads.back().detach();
+        
+    }
+
+    ~ThreadPool() {
+        stop = true;
+        cv.notify_all(); // 唤醒所有线程，确保它们能退出
+        for (std::thread &thread : threads) {
+            if (thread.joinable()) {
+                thread.join(); // 等待线程结束
+            }
         }
     }
     
-    ~ThreadPool(){
-        sem_destroy(&sem);
-    }
-
     bool append(int fd, bool isEpollOut);
 
 private:
     /*工作线程运行的函数，它不断从工作队列中取出任务并执行之*/
     void run();
 
-    EpollManager&epollManager;
+EpollManager&epollManager;
     TimerManager&timerManager;
     HttpManager&httpManager;
 
@@ -52,7 +52,8 @@ private:
     std::vector<std::thread> threads;       //描述线程池的数组，其大小为m_thread_number
     std::queue<std::pair<size_t,bool> > workQueue; //请求队列
     std::mutex queueLocker;       //保护请求队列的互斥锁
-    sem_t sem;             //是否有任务需要处理
+    std::condition_variable cv;
+    bool stop;
 };
 
 #endif
