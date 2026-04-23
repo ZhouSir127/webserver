@@ -2,45 +2,183 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>注册账号</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注册新操作员 - 无人机地面控制站</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #2c3e50; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .box { background: #ecf0f1; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 300px; text-align: center; }
-        input { width: 90%; padding: 10px; margin: 10px 0; border: 1px solid #bdc3c7; border-radius: 4px; box-sizing: border-box;}
-        button { width: 100%; padding: 10px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px;}
-        button:hover { background: #2ecc71; }
-        a { text-decoration: none; color: #2980b9; font-size: 14px; display: inline-block; margin-top: 15px;}
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #ffffff; /* 统一的纯白背景 */
+            background-image: radial-gradient(#e0e5ec 1px, transparent 1px);
+            background-size: 20px 20px;
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+            color: #333333; 
+        }
+        .register-container { 
+            background: #ffffff; 
+            padding: 40px 35px; 
+            border-radius: 8px; 
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08); 
+            width: 320px; 
+            text-align: center; 
+            border: 1px solid #eaeaea; 
+        }
+        .header-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+        h2 { 
+            color: #107c41; /* 使用沉稳的绿色区分注册和登录 */
+            margin-top: 0;
+            margin-bottom: 30px; 
+            font-weight: 600; 
+            letter-spacing: 1px; 
+            font-size: 22px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .input-group label {
+            display: block;
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        input { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid #cccccc; 
+            border-radius: 4px; 
+            box-sizing: border-box; 
+            font-size: 14px; 
+            background: #fdfdfd; 
+            transition: all 0.3s ease; 
+        }
+        input:focus { 
+            border-color: #107c41; 
+            box-shadow: 0 0 0 3px rgba(16, 124, 65, 0.1);
+            outline: none; 
+            background: #ffffff; 
+        }
+        button { 
+            width: 100%; 
+            padding: 12px; 
+            background: #107c41; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 15px; 
+            font-weight: 600; 
+            margin-top: 10px; 
+            transition: background 0.2s, transform 0.1s; 
+        }
+        button:hover { 
+            background: #0b5a2e; 
+        }
+        button:active { 
+            transform: scale(0.98); 
+        }
+        .login-link { 
+            text-decoration: none; 
+            color: #0078d4; 
+            font-size: 13px; 
+            display: inline-block; 
+            margin-top: 25px; 
+            transition: color 0.2s; 
+        }
+        .login-link:hover { 
+            color: #005a9e; 
+            text-decoration: underline; 
+        }
+        .error-msg {
+            color: #d32f2f;
+            font-size: 13px;
+            margin-top: -10px;
+            margin-bottom: 15px;
+            display: none;
+        }
     </style>
 </head>
 <body>
-    <div class="box">
+    <div class="register-container">
+        <div class="header-icon">🛡️</div>
         <h2>注册新操作员</h2>
-        <form id="regForm" action="/r" method="post">
-            <input type="text" name="user" placeholder="设定用户名" required>
-            <input type="password" name="password" placeholder="设定密码" required>
-            <button type="button" onclick="submitReg()">立即注册</button>
+        
+        <div id="errorBox" class="error-msg"></div>
+
+        <form id="regForm" onsubmit="event.preventDefault(); submitReg();">
+            <div class="input-group">
+                <label for="user">设定用户名</label>
+                <input type="text" id="user" name="user" placeholder="输入新的操作员账号" required autocomplete="off">
+            </div>
+            <div class="input-group">
+                <label for="password">设定授权密码</label>
+                <input type="password" id="password" name="password" placeholder="输入复杂的密码" required>
+            </div>
+            <button type="submit">分配系统权限</button>
         </form>
-        <a href="/">返回登录页</a>
+        
+        <a href="/" class="login-link">已有账号？返回安全登录</a>
     </div>
 
     <script>
         function submitReg() {
             const form = document.getElementById('regForm');
-            const user = form.user.value;
-            const pass = form.password.value;
-            if(!user || !pass) return alert('请输入账号和密码');
+            const errorBox = document.getElementById('errorBox');
+            const user = form.user.value.trim();
+            const pass = form.password.value.trim();
+            
+            errorBox.style.display = 'none';
 
-            fetch('/r', {
+            if(!user || !pass) {
+                showError('请输入完整的账号和密码');
+                return;
+            }
+
+            // 保持与 C++ 后端一致的解包格式
+            const payload = user + " " + pass;
+
+            // 修正：向 /register 发送 POST 请求
+            fetch('/register', {
                 method: 'POST',
-                body: user + " " + pass
+                body: payload
             })
-            .then(res => res.text())
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP 通信异常状态码: ${res.status}`);
+                }
+                return res.text();
+            })
             .then(html => {
-                // 拿到真实的 html 字符串后，重新绘制整个网页
-                document.open();
-                document.write(html);
-                document.close();
+                // 如果后端判断用户已存在或数据库错误，会返回 registerError.html
+                if (html.includes("User Exists") || html.includes("registerError")) {
+                    showError("该操作员账号已被占用，请更换用户名");
+                } else {
+                    // 注册成功，后端会重定向到 log.html
+                    document.open();
+                    document.write(html);
+                    document.close();
+                    
+                    // 修正历史记录，让 URL 显示正确
+                    window.history.pushState({}, "", "/");
+                }
+            })
+            .catch(err => {
+                showError('服务器连接失败，请检查 C++ 后端状态');
+                console.error(err);
             });
+        }
+
+        function showError(msg) {
+            const errorBox = document.getElementById('errorBox');
+            errorBox.textContent = msg;
+            errorBox.style.display = 'block';
         }
     </script>
 </body>

@@ -80,31 +80,41 @@ Router::Router(const SqlInfo&sqlInfo) :
                         if( !(iss >> password) )
                             return;
                     
-                        if (conn->url[1] == 'r'){    //提交注册
-                            if (user.exists(name) ==false){
-                                if(user.add(name,password)){
-                                    conn->realFilePath = conn->root + "/log.html";
-                                    LOG_INFO("User Register Success: %s", name.c_str());
-                                }else{
-                                    conn->realFilePath = conn->root + "/registerError.html";
-                                    LOG_ERROR("User Register Failed (DB Error): %s", name.c_str());
-                                }
+                        if (user.exists(name) ==false){
+                            if(user.add(name,password)){
+                                conn->realFilePath = conn->root + "/log.html";
+                                LOG_INFO("User Register Success: %s", name.c_str());
                             }else{
                                 conn->realFilePath = conn->root + "/registerError.html";
-                                LOG_ERROR("User Register Failed (User Exists): %s", name.c_str());
+                                LOG_ERROR("User Register Failed (DB Error): %s", name.c_str());
                             }
-                        }else if ( user.check(name,password) ){
+                        }else{
+                            conn->realFilePath = conn->root + "/registerError.html";
+                            LOG_ERROR("User Register Failed (User Exists): %s", name.c_str());
+                        }
+                    } 
+            },
+        {"/login",[&](HttpConn* conn) ->void { 
+                        std::string name , password;
+                        std::istringstream iss(conn->requestBody);
+                        
+                        if( !(iss >> name) )
+                            return;
+                        if( !(iss >> password) )
+                            return;
+                
+                        if ( user.check(name,password) ){
                             conn->realFilePath = conn->root + "/index.html";
                             LOG_INFO("User Login Success: %s", name.c_str());
                         }else{
                             conn->realFilePath = conn->root + "/logError.html";
                             LOG_ERROR("User Login Failed (Wrong password/No user): %s", name.c_str());
-                        }
-                    }
-        },
+                        }            
+                    }      
+            }
+        }
         {} 
-    }
-    {}
+    
 
 void Router:: route(HttpConn* conn){
     if (conn->method == HttpMethod::GET){

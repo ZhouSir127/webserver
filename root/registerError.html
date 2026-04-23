@@ -2,11 +2,84 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>注册失败</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注册失败 - 无人机地面控制站</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            /* 保持统一的白底点状网格背景 */
+            background-color: #ffffff; 
+            background-image: radial-gradient(#e0e5ec 1px, transparent 1px);
+            background-size: 20px 20px;
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+            color: #333333; 
+        }
+        .error-container { 
+            background: #ffffff; 
+            padding: 40px 35px; 
+            border-radius: 8px; 
+            box-shadow: 0 10px 30px rgba(211, 47, 47, 0.1); 
+            width: 320px; 
+            text-align: center; 
+            border: 1px solid #eaeaea; 
+            border-top: 5px solid #d32f2f; /* 顶部红边强调错误状态 */
+            animation: slideDown 0.3s ease-out;
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .error-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+            display: inline-block;
+        }
+        h2 { 
+            color: #d32f2f; /* 警示红 */
+            margin-top: 0;
+            margin-bottom: 15px; 
+            font-weight: 600; 
+            letter-spacing: 1px; 
+            font-size: 22px;
+        }
+        p {
+            color: #666666;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .btn-back { 
+            display: inline-block;
+            width: 100%; 
+            padding: 12px; 
+            background: #107c41; /* 与 register.html 保持一致的绿色 */
+            color: white; 
+            text-decoration: none;
+            border-radius: 4px; 
+            font-size: 15px; 
+            font-weight: 600; 
+            box-sizing: border-box;
+            transition: background 0.2s, transform 0.1s; 
+        }
+        .btn-back:hover { 
+            background: #0b5a2e; 
+        }
+        .btn-back:active { 
+            transform: scale(0.98); 
+        }
+    </style>
 </head>
-<body style="text-align: center; padding-top: 100px; background: #2c3e50; color: white; font-family: Arial;">
-    <h1 style="color: #e74c3c;">❌ 注册失败！</h1>
-    <p>可能是由于操作员用户名已被占用，或系统数据库连接异常。</p>
-    <a href="/r" style="font-size: 18px; color: #3498db; text-decoration: none; background: #ecf0f1; padding: 10px 20px; border-radius: 5px; display: inline-block; margin-top: 20px;">返回重新注册</a>
+<body>
+    <div class="error-container">
+        <div class="error-icon">⚠️</div>
+        <h2>权限分配失败</h2>
+        <p>操作员账号可能已被占用，<br>或系统数据库连接发生异常。<br>请尝试更换用户名后重新注册。</p>
+        
+        <a href="/register" class="btn-back">返回重新注册</a>
+    </div>
 </body>
 </html>

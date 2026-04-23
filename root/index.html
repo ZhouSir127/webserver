@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <title>无人机飞行控制台 MAVSDK</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #1a1a2e; color: #e9e9eb; padding: 20px; text-align: center; margin: 0; }
-        h1 { color: #00d2ff; text-shadow: 0 0 10px rgba(0, 210, 255, 0.5); }
-        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; max-width: 900px; margin: 30px auto; }
-        .btn { padding: 15px; font-size: 15px; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .btn:active { transform: translateY(2px); box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a2e; color: #e9e9eb; padding: 20px; text-align: center; margin: 0; }
+        h1 { color: #00d2ff; text-shadow: 0 0 10px rgba(0, 210, 255, 0.5); letter-spacing: 2px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; max-width: 900px; margin: 30px auto; }
+        .btn { padding: 15px; font-size: 15px; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .btn:active { transform: translateY(3px); box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
         
         .btn-conn { background: #0f3460; color: white; border: 1px solid #16213e; }
         .btn-conn:hover { background: #1a5b92; }
@@ -22,33 +22,33 @@
         .btn-info { background: #4caf50; color: white; }
         .btn-info:hover { background: #66bb6a; }
 
-        #log-screen { background: #000; color: #0f0; border: 2px solid #333; border-radius: 8px; height: 200px; overflow-y: auto; padding: 15px; text-align: left; max-width: 900px; margin: 20px auto; font-family: 'Courier New', monospace; box-shadow: inset 0 0 10px rgba(0,255,0,0.1);}
+        #log-screen { background: #0b0c10; color: #45f3ff; border: 2px solid #1f2833; border-radius: 8px; height: 250px; overflow-y: auto; padding: 15px; text-align: left; max-width: 900px; margin: 20px auto; font-family: 'Consolas', 'Courier New', monospace; box-shadow: inset 0 0 15px rgba(0,210,255,0.05);}
         .log-time { color: #888; margin-right: 10px; }
+        .log-error { color: #ff4c4c; }
     </style>
 </head>
 <body>
     <h1>🛸 地面指挥中心 (Ground Control Station)</h1>
     
     <div class="grid">
-        <button class="btn btn-conn" onclick="sendCommand('c', '连接飞控')">🔗 尝试连接飞控 (c)</button>
-        <button class="btn btn-conn" onclick="sendCommand('d', '断开连接')">🔌 断开飞控 (d)</button>
-        <button class="btn btn-conn" onclick="sendCommand('C', '查询连接状态')">📡 连接状态 (C)</button>
+        <button class="btn btn-conn" onclick="sendCommand('connect', '连接飞控')">🔗 尝试连接飞控</button>
+        <button class="btn btn-conn" onclick="sendCommand('disconnect', '断开连接')">🔌 断开飞控</button>
+        <button class="btn btn-conn" onclick="sendCommand('connstatus', '查询连接状态')">📡 连接状态</button>
         
-        <button class="btn btn-action" onclick="sendCommand('a', '解锁 (Arm)')">🔥 解锁螺旋桨 (a)</button>
-        <button class="btn btn-action" onclick="sendCommand('D', '上锁 (Disarm)')">🛑 强制上锁 (D)</button>
-        <button class="btn btn-move" onclick="sendCommand('m', '切换悬停模式 (Hold)')">⏸️ 悬停模式 (m)</button>
+        <button class="btn btn-action" onclick="sendCommand('arm', '解锁 (Arm)')">🔥 解锁螺旋桨</button>
+        <button class="btn btn-action" onclick="sendCommand('disarm', '上锁 (Disarm)')">🛑 强制上锁</button>
+        <button class="btn btn-move" onclick="sendCommand('hold', '切换悬停模式 (Hold)')">⏸️ 悬停模式</button>
         
-        <button class="btn btn-move" onclick="sendCommand('t', '起飞 (Takeoff)')">🛫 自动起飞 (t)</button>
-        <button class="btn btn-move" onclick="sendCommand('l', '降落 (Land)')">🛬 自动降落 (l)</button>
-        <button class="btn btn-move" onclick="sendCommand('R', '返航 (RTL)')">🏠 自动返航 (R)</button>
-        <button class="btn btn-move" onclick="sendCommand('g', '飞行至目标 (Goto)')">📍 目标飞行 (g)</button>
+        <button class="btn btn-move" onclick="sendCommand('takeoff', '起飞 (Takeoff)')">🛫 自动起飞</button>
+        <button class="btn btn-move" onclick="sendCommand('land', '降落 (Land)')">🛬 自动降落</button>
+        <button class="btn btn-move" onclick="sendCommand('rtl', '返航 (RTL)')">🏠 自动返航</button>
         
-        <button class="btn btn-info" onclick="sendCommand('p', '获取位置 (Position)')">🌍 经纬度位置 (p)</button>
-        <button class="btn btn-info" onclick="sendCommand('v', '获取速度 (Velocity)')">🚀 飞行速度 (v)</button>
-        <button class="btn btn-info" onclick="sendCommand('A', '获取姿态 (Attitude)')">✈️ 欧拉角姿态 (A)</button>
-        <button class="btn btn-info" onclick="sendCommand('b', '获取电量 (Battery)')">🔋 电池状态 (b)</button>
-        <button class="btn btn-info" onclick="sendCommand('G', '获取 GPS 状态')">🛰️ GPS 信号 (G)</button>
-        <button class="btn btn-info" onclick="sendCommand('s', '获取健康状态')">❤️ 系统健康 (s)</button>
+        <button class="btn btn-info" onclick="sendCommand('position', '获取位置 (Position)')">🌍 经纬度位置</button>
+        <button class="btn btn-info" onclick="sendCommand('velocity', '获取速度 (Velocity)')">🚀 飞行速度</button>
+        <button class="btn btn-info" onclick="sendCommand('attitude', '获取姿态 (Attitude)')">✈️ 欧拉角姿态</button>
+        <button class="btn btn-info" onclick="sendCommand('battery', '获取电量 (Battery)')">🔋 电池状态</button>
+        <button class="btn btn-info" onclick="sendCommand('gps', '获取 GPS 状态')">🛰️ GPS 信号</button>
+        <button class="btn btn-info" onclick="sendCommand('state', '获取健康状态')">❤️ 系统健康</button>
     </div>
 
     <div id="log-screen">
@@ -56,14 +56,14 @@
     </div>
 
     <script>
-        function sendCommand(cmdChar, actionName) {
-            logMsg(`>>> 发送指令: [/${cmdChar}] ${actionName}`);
+        function sendCommand(routePattern, actionName) {
+            logMsg(`>>> 发送指令: [/${routePattern}] ${actionName}`);
             
-            // 使用 GET 请求调用你的对应路由字母
-            fetch(`/${cmdChar}`, { method: 'GET' })
+            // 使用 GET 请求，匹配 C++ Router 中的 getRoutes
+            fetch(`/${routePattern}`, { method: 'GET' })
                 .then(response => {
                     if (response.ok) {
-                        logMsg(`<<< 指令已送达`);
+                        logMsg(`<<< 指令 [${actionName}] 已成功送达`);
                     } else {
                         logMsg(`[错误] 请求被拒绝, 状态码: ${response.status}`, true);
                     }
@@ -78,8 +78,8 @@
             const now = new Date();
             const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
             
-            const colorBlock = isError ? 'style="color: red;"' : '';
-            screen.innerHTML += `<div ${colorBlock}><span class="log-time">[${timeStr}]</span> ${msg}</div>`;
+            const colorClass = isError ? 'class="log-error"' : '';
+            screen.innerHTML += `<div ${colorClass}><span class="log-time">[${timeStr}]</span> ${msg}</div>`;
             screen.scrollTop = screen.scrollHeight; // 自动滚到底部
         }
     </script>
