@@ -11,13 +11,13 @@ void ThreadPool::run()
         if ( !work.second )
             switch(httpManager.process(work.first) ){//读处理后，无需响应直接关闭
                 case HttpCode::CLOSED_CONNECTION:
-            //        EpollManager::getInstance().remove(fd);
+                    EpollManager::getInstance().remove(work.first);
                     timerManager.remove(work.first);
                     httpManager.remove(work.first);
                     close(work.first);
                     break;
                 case HttpCode::NO_REQUEST://继续读
-                    //EpollManager::getInstance().modify(fd,EPOLLIN);
+                    EpollManager::getInstance().modify(work.first, EPOLLIN);
                     timerManager.adjust(work.first);
                     break;
                 case HttpCode::GET_REQUEST://读处理后需要响应
@@ -25,7 +25,7 @@ void ThreadPool::run()
                 case HttpCode::NO_RESOURCE:
                 case HttpCode::FORBIDDEN_REQUEST:
                 case HttpCode::FILE_REQUEST:
-                    //EpollManager::getInstance().modify(fd,::EPOLLOUT);
+                    EpollManager::getInstance().modify(work.first,::EPOLLOUT);
                     timerManager.adjust(work.first);
                     break;
                 default: // 满足 -Wswitch-default，处理预料之外的情况
@@ -35,14 +35,13 @@ void ThreadPool::run()
             HttpCode ret = httpManager.write(work.first);
     
             if ( ret == HttpCode::NO_REQUEST ){//继续写
-        //        EpollManager::getInstance().modify(fd,EPOLLOUT);
+                EpollManager::getInstance().modify(work.first, EPOLLOUT);
                 timerManager.adjust(work.first);
             }else if ( ret == HttpCode::GET_REQUEST && httpManager.getLinger(work.first) ){
-        //        EpollManager::getInstance() .modify(fd,EPOLLIN);
+                EpollManager::getInstance() .modify(work.first, EPOLLIN);
                 timerManager.adjust(work.first);
                 httpManager.init(work.first);
             }else{
-        //        EpollManager::getInstance().remove(fd);
                 timerManager.remove(work.first);
                 httpManager.remove(work.first);
                 close(work.first);

@@ -14,6 +14,8 @@
 #include "../epoll_manager/epoll_manager.h"
 #include "../args.h"
 #include "../channel/channel.h"
+#include "../timer_manager/timer_manager.h"
+#include "../http_conn/http_conn.h"
 
 class Listen
 {
@@ -22,18 +24,23 @@ private:
     bool isListenEt;
     int listenFd;
     std::unique_ptr<Channel> listenChannel;
+    TimerManager& timerManager;
+    HttpManager& httpManager;
+    
     bool acceptNewConnection();
 
 public:
-    Listen(const ListenInfo& listenInfo)
-    :port(listenInfo.port),isListenEt(listenInfo.isListenEt),listenFd(socket(PF_INET, SOCK_STREAM, 0)),listenChannel(std::make_unique<Channel>(
+    Listen(const ListenInfo& listenInfo, TimerManager& timerManager, HttpManager& httpManager)
+    :port(listenInfo.port),isListenEt(listenInfo.isListenEt),listenFd(socket(PF_INET, SOCK_STREAM, 0)),
+    listenChannel(std::make_unique<Channel>(
         listenFd,
-        isListenEt ? (EPOLLIN | EPOLLET) : EPOLLIN,
         [this](){ acceptNewConnection(); },
         nullptr,
         nullptr
-    )) {
-            EpollManager::getInstance().add(listenChannel.get() );
+    )), 
+    timerManager(timerManager),httpManager(httpManager)
+    {
+            EpollManager::getInstance().add(listenChannel.get(),isListenEt ? (EPOLLIN | EPOLLET) : EPOLLIN );
 
             int flag = 1;
             setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
@@ -64,6 +71,7 @@ public:
     
     ~Listen(){
         close(listenFd);
+        EpollManager::getInstance().remove(listenChannel->getFd() );
     }
 };
 

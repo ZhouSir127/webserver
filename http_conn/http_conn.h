@@ -138,7 +138,6 @@ public:
     HttpConn(bool connectET,int fd,Death& death,WorkQueue& workQueue,Router&router,const std::string&root)
     :isConnectEt(connectET),fd(fd),death(death),workQueue(workQueue),httpChannel(std::make_unique<Channel>(
         fd,
-        EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (connectET ? EPOLLET : 0),
         [this]() ->void { this->workQueue.append(this->fd, false); },
         [this]() ->void { this->workQueue.append(this->fd, true); },
         [this](){ this->death.add(this->fd); }
@@ -148,13 +147,14 @@ public:
     router(router),root(root),
     bytesToSend(0),bytesHaveSent(0),ioVectorCount(1),ioVectorIdx(0),fileAddress(nullptr),fileSize(0)
     {
-        EpollManager::getInstance().add(httpChannel.get() );
+        EpollManager::getInstance().add(httpChannel.get(),EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (connectET ? EPOLLET : 0) );
     }
     ~HttpConn(){
         if (fileAddress) {
             munmap(fileAddress, fileSize);
             fileAddress = nullptr;
         }
+        EpollManager::getInstance().remove(httpChannel->getFd() );
     }
 
     void init();

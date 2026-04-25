@@ -69,13 +69,12 @@ public:
 
         signalChannel = std::make_unique<Channel>(
             pipefd[0],
-            EPOLLIN,
             [](){ dealWithSignal(); },
             nullptr,
             nullptr
         );
 
-        EpollManager::getInstance().add(signalChannel.get());
+        EpollManager::getInstance().add(signalChannel.get(),EPOLLIN);
 
         addSig(SIGPIPE, SIG_IGN);
         addSig(SIGALRM, sigHandler);
@@ -83,9 +82,11 @@ public:
 
         setAlarm();
     }
+
     static void clean() {
         close(pipefd[1]);
         close(pipefd[0]);
+        EpollManager::getInstance().remove(signalChannel->getFd() );
     }
 
     static bool getTimeout() { 
@@ -109,7 +110,6 @@ private:
     static bool timeout;
     static bool stopServer;
     static std::unique_ptr<Channel> signalChannel;
-    
 };
 
 class TimerManager{

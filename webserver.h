@@ -31,11 +31,12 @@ WebServer(
     
 private:
     void remove(int fd);
-    Listen listen;
+    void add(int fd);
     Death death;
     TimerManager timerManager;
     WorkQueue workQueue;
     HttpManager httpManager;
     ThreadPool threadPool;
+    Listen listen;
 };
 #endif

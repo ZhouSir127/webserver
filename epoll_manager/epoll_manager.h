@@ -36,9 +36,9 @@ public:
         return epollManager;
     }
     //将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
-    int add(Channel* channel);
+    int add(Channel* channel, uint32_t events);
     int remove(int fd);
-    int modify(Channel* channel);
+    int modify(int fd, uint32_t events);
     bool wait(int timeoutMs = -1);
 };
 

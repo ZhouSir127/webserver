@@ -8,7 +8,6 @@
 #include <cstring>
 #include "listen.h"
 #include "../log/log.h"
-#include "../epoll_manager/epoll_manager.h"
 #include "../consts.h"
 
 bool Listen::acceptNewConnection()
@@ -35,9 +34,8 @@ bool Listen::acceptNewConnection()
             LOG_ERROR("%s", "Internal server busy");
             return false;
         }        
-        EpollManager::getInstance().add(listenChannel.get() );
-        // timerManager.add(connfd);
-        // httpManager.add(connfd);
+        timerManager.add(connfd);
+        httpManager.add(connfd);
     }
     else
         while (1)
@@ -55,9 +53,8 @@ bool Listen::acceptNewConnection()
                 LOG_ERROR("%s", "Internal server busy");
                 return false;
             }
-            EpollManager::getInstance().add(listenChannel.get() );
-            // timerManager.add(fd);
-            // httpManager.add(fd);
+            timerManager.add(fd);
+            httpManager.add(fd);
         }
     return true;
 }

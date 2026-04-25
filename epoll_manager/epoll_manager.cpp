@@ -13,20 +13,20 @@ int EpollManager::setNonBlocking(int fd)
 }
 
 //将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
-int EpollManager::add(Channel*channel)
+int EpollManager::add(Channel*channel, uint32_t events)
 {
     epoll_event event;
-    event.events = channel -> getEvents();
+    event.events = events;
     event.data.ptr = channel;
     setNonBlocking(channel -> getFd() );
     return epoll_ctl(epollFd, EPOLL_CTL_ADD, channel -> getFd(), &event);    
 }
 
-int EpollManager::modify(Channel*channel)
+int EpollManager::modify(int fd, uint32_t events)
 {
     epoll_event event;
-    event.events = channel -> getEvents();
-    return epoll_ctl(epollFd, EPOLL_CTL_MOD, channel -> getFd(), &event);
+    event.events = events;
+    return epoll_ctl(epollFd, EPOLL_CTL_MOD, fd, &event);
 }
 
 //从内核时间表删除描述符

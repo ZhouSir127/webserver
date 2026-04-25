@@ -10,20 +10,25 @@ WebServer::WebServer(
                 const ThreadPoolInfo& threadPoolInfo,
                 const LogInfo& logInfo  
             )
-:listen(listenInfo),
-timerManager(timerInfo, death),
+:timerManager(timerInfo, death),
 workQueue(threadPoolInfo.maxRequest),
 httpManager(httpInfo,sqlInfo,workQueue,death),
-threadPool(timerManager,httpManager,threadPoolInfo.threadNumer,workQueue)
+threadPool(timerManager,httpManager,threadPoolInfo.threadNumer,workQueue),
+listen(listenInfo, timerManager, httpManager)
 {
     Log::init(logInfo.file,logInfo.close);
 }
 
 void WebServer::remove(int fd){
-    EpollManager::getInstance().remove(fd);
     timerManager.remove(fd);
     httpManager.remove(fd);
     close(fd);
+}
+
+void WebServer::add(int fd)
+{
+
+    // 这里可以添加一些初始化逻辑，例如加载配置文件、初始化数据库连接池等
 }
 
 void WebServer::eventLoop()
