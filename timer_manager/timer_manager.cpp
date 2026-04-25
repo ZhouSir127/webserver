@@ -121,6 +121,9 @@ void TimerMinHeap::tick()
 
 unsigned int SignalHandler::timeSlot;
 int SignalHandler::pipefd[2];
+bool SignalHandler::timeout;
+bool SignalHandler::stopServer;
+std::unique_ptr<Channel> SignalHandler::signalChannel;
 
 //信号处理函数
 void SignalHandler::sigHandler(int sig)

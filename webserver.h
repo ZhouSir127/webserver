@@ -31,7 +31,6 @@ WebServer(
     
 private:
     void remove(int fd);
-    void add(int fd);
     Death death;
     TimerManager timerManager;
     WorkQueue workQueue;

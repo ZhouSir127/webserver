@@ -147,7 +147,7 @@ public:
     router(router),root(root),
     bytesToSend(0),bytesHaveSent(0),ioVectorCount(1),ioVectorIdx(0),fileAddress(nullptr),fileSize(0)
     {
-        EpollManager::getInstance().add(httpChannel.get(),EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (connectET ? EPOLLET : 0) );
+        EpollManager::getInstance().add(httpChannel.get(),EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (connectET ? EPOLLET : static_cast<uint32_t>(0)) );
     }
     ~HttpConn(){
         if (fileAddress) {

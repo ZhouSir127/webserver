@@ -103,13 +103,13 @@ public:
 private:
     static unsigned int timeSlot;
     static int pipefd[2];
+    static bool timeout;
+    static bool stopServer;
+    static std::unique_ptr<Channel> signalChannel;
     //设置信号函数
     static void addSig(int sig, void(*handler)(int), bool restart = false );
     //信号处理函数
     static void sigHandler(int sig);
-    static bool timeout;
-    static bool stopServer;
-    static std::unique_ptr<Channel> signalChannel;
 };
 
 class TimerManager{

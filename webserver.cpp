@@ -25,12 +25,6 @@ void WebServer::remove(int fd){
     close(fd);
 }
 
-void WebServer::add(int fd)
-{
-
-    // 这里可以添加一些初始化逻辑，例如加载配置文件、初始化数据库连接池等
-}
-
 void WebServer::eventLoop()
 {
     do{
