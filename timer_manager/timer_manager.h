@@ -23,9 +23,13 @@
 
 #include <vector>
 #include <mutex>
-//#include <pair.h>
+#include <memory>
+
 #include "../consts.h"
 #include "../args.h"
+#include "../epoll_manager/epoll_manager.h"
+#include "../channel/channel.h"
+#include "../death/death.h"
 
 class TimerMinHeap
 {
@@ -33,39 +37,46 @@ private:
     std::mutex lock;
     time_t lifeSpan;
     std::vector<std::pair<time_t, size_t> > fdToExpireIdx;//{死期，在堆索引}    
-    std::vector<int> death;
     size_t size;
     std::vector<int>heap;
+    Death&death;
     bool keep(size_t idx);
     void pop();
 
 public:
-    TimerMinHeap(time_t lifeSpan):lifeSpan(lifeSpan),fdToExpireIdx(consts::MAX_FD+1,{-1,-1} ),size(0),heap(consts::MAX_FD+1,-1){}
+    TimerMinHeap(time_t lifeSpan, Death& death):lifeSpan(lifeSpan),fdToExpireIdx(consts::MAX_FD+1,{-1,-1} ),size(0),heap(consts::MAX_FD+1,-1),death(death){}
     
     void add(int fd);
     void adjust(int fd);
     void remove(int fd);
     void tick();
-    const std::vector<int>& getDeath() const { return death; }
-
 };
-
 
 class SignalHandler{
 
 public:
     SignalHandler() = delete;
 
-    static int getPipeWriteFd() { return pipefd[1]; }   
-    static int getPipeReadFd() { return pipefd[0]; }
-
     static void setAlarm()  { alarm(timeSlot); }
-    static void dealWithSignal (bool &timeout, bool &stopServer);
+    static void dealWithSignal ();
 
     static void init(unsigned int slot){
         timeSlot = slot;
         socketpair(PF_UNIX, SOCK_STREAM, 0, pipefd);
-    
+        
+        timeout = false;
+        stopServer = false;
+
+        signalChannel = std::make_unique<Channel>(
+            pipefd[0],
+            EPOLLIN,
+            [](){ dealWithSignal(); },
+            nullptr,
+            nullptr
+        );
+
+        EpollManager::getInstance().add(signalChannel.get());
+
         addSig(SIGPIPE, SIG_IGN);
         addSig(SIGALRM, sigHandler);
         addSig(SIGTERM, sigHandler);
@@ -77,6 +88,17 @@ public:
         close(pipefd[0]);
     }
 
+    static bool getTimeout() { 
+        bool ret = timeout;    
+        timeout = false;
+        return ret; 
+    }
+    static bool getStopServer() { 
+        bool ret = stopServer;
+        stopServer = false;
+        return ret; 
+    }
+
 private:
     static unsigned int timeSlot;
     static int pipefd[2];
@@ -84,12 +106,16 @@ private:
     static void addSig(int sig, void(*handler)(int), bool restart = false );
     //信号处理函数
     static void sigHandler(int sig);
+    static bool timeout;
+    static bool stopServer;
+    static std::unique_ptr<Channel> signalChannel;
+    
 };
 
 class TimerManager{
 
 public:
-    TimerManager(const TimerInfo& timerInfo):heap(timerInfo.lifeSpan){
+    TimerManager(const TimerInfo& timerInfo, Death& death):heap(timerInfo.lifeSpan, death){
         SignalHandler::init(timerInfo.timeSlot);
     }
     ~TimerManager(){
@@ -100,13 +126,12 @@ public:
         heap.tick();
         SignalHandler::setAlarm();
     }
-    int getPipeWriteFd() const { return SignalHandler::getPipeWriteFd(); }
-    int getPipeReadFd() const { return SignalHandler::getPipeReadFd(); }
+
     void add(int fd) { heap.add(fd); }
     void adjust(int fd) { heap.adjust(fd); }
     void remove(int fd) { heap.remove(fd); }
-    void dealWithSignal(bool &timeout, bool &stop_server) { SignalHandler::dealWithSignal(timeout, stop_server); }
-    const std::vector<int>& getDeath() const { return heap.getDeath(); }
+    bool getTimeout() const { return SignalHandler::getTimeout(); }
+    bool getStopServer() const { return SignalHandler::getStopServer(); }
 
 private:
     TimerMinHeap heap;

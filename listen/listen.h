@@ -62,12 +62,9 @@ public:
             LOG_INFO("WebServer started successfully, listening on port %d", port);
     }
     
-    ~Listen() {
+    ~Listen(){
         close(listenFd);
     }
-    void eventListen();
-
-
 };
 
 #endif

@@ -31,6 +31,10 @@
 
 #include "../router/router.h"
 #include "../args.h"
+#include "../channel/channel.h"  
+#include "../work_queue/work_queue.h"
+#include "../epoll_manager/epoll_manager.h"
+#include "../death/death.h"
 
 enum class HttpMethod
 {
@@ -95,9 +99,12 @@ private:
 
         return true;
     }
-    
+
     const bool isConnectEt;
     const int fd;
+    Death& death;
+    WorkQueue& workQueue;
+    std::unique_ptr<Channel>httpChannel;
     
     std::string readBuffer;
     size_t readIdx;
@@ -126,15 +133,23 @@ private:
 
     char* fileAddress; // 专门用来记录 mmap 的原地址
     size_t fileSize;   // 专门记录文件大小
-
+    
 public:
-    HttpConn(bool connectET,int fd,Router&router,const std::string&root)
-    :isConnectEt(connectET),fd(fd),
+    HttpConn(bool connectET,int fd,Death& death,WorkQueue& workQueue,Router&router,const std::string&root)
+    :isConnectEt(connectET),fd(fd),death(death),workQueue(workQueue),httpChannel(std::make_unique<Channel>(
+        fd,
+        EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (connectET ? EPOLLET : 0),
+        [this]() ->void { this->workQueue.append(this->fd, false); },
+        [this]() ->void { this->workQueue.append(this->fd, true); },
+        [this](){ this->death.add(this->fd); }
+    ) ),
     readBuffer(1024,'\0'),readIdx(0),checkedIdx(0),startIdx(0),
     checkState(CheckState::CHECK_STATE_REQUESTLINE),method(HttpMethod::GET),isLinger(false),contentLength(0),
     router(router),root(root),
     bytesToSend(0),bytesHaveSent(0),ioVectorCount(1),ioVectorIdx(0),fileAddress(nullptr),fileSize(0)
-    {}
+    {
+        EpollManager::getInstance().add(httpChannel.get() );
+    }
     ~HttpConn(){
         if (fileAddress) {
             munmap(fileAddress, fileSize);
@@ -157,17 +172,21 @@ bool isConnectEt;
 std::vector<std::unique_ptr<HttpConn> > fdToConn;
 Router router;
 const std::string&root;
+WorkQueue& workQueue;
+Death& death;
 
 public:
-    HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo)
+    HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo,WorkQueue& workQueue,Death& death)
     :isConnectEt(httpInfo.isConnectEt),
     fdToConn(1+consts::MAX_FD),
     router(sqlInfo),
-    root(httpInfo.root)
+    root(httpInfo.root),
+    workQueue(workQueue),
+    death(death)
     {}
     
     void add(int fd){
-        fdToConn[fd]=std::make_unique<HttpConn>(isConnectEt,fd,router,root);
+        fdToConn[fd]=std::make_unique<HttpConn>(isConnectEt,fd,death,workQueue,router,root);
     }    
     //关闭连接，关闭一个连接，客户总量减一
     void remove(int fd){

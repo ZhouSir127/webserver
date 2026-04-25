@@ -18,24 +18,6 @@ int EpollManager::add(Channel*channel)
     epoll_event event;
     event.events = channel -> getEvents();
     event.data.ptr = channel;
-
-    // switch (type)
-    //     {
-    //     case FdType::LISTEN:
-    //         event.events = EPOLLIN;
-    //         if (isListenEt)
-    //             event.events |= EPOLLET;
-    //         break;
-    //     case FdType::PIPE:
-    //         event.events = EPOLLIN;
-    //         break;  
-    //     case FdType::CONNECTION:
-    //         event.events = EPOLLIN | EPOLLRDHUP | EPOLLONESHOT;
-    //         if (isConnectEt)
-    //             event.events |= EPOLLET;
-    //     default:
-    //         break;
-    //     }
     setNonBlocking(channel -> getFd() );
     return epoll_ctl(epollFd, EPOLL_CTL_ADD, channel -> getFd(), &event);    
 }
@@ -63,6 +45,6 @@ bool EpollManager::wait(int timeoutMs)
         Channel* channel = static_cast<Channel*>(events[i].data.ptr);
         channel -> handleEvent(events[i].events);
     }
-        
+
     return true;
 }

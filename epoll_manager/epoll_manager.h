@@ -26,6 +26,10 @@ private:
         close(epollFd);
     }
 
+    const EpollManager& operator=(const EpollManager&) = delete;
+    EpollManager& operator=(EpollManager&&) = delete;
+    EpollManager(const EpollManager&) = delete;
+    EpollManager(EpollManager&&) = delete;
 public:
     static EpollManager&getInstance(){
         static EpollManager epollManager;

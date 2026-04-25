@@ -13,7 +13,8 @@
 #include "http_conn/http_conn.h"
 #include "thread_pool/thread_pool.h"
 #include "args.h"
-
+#include "work_queue/work_queue.h"
+#include "death/death.h"
 class WebServer
 {
 public:
@@ -29,9 +30,11 @@ WebServer(
     void eventLoop();
     
 private:
-    
+    void remove(int fd);
     Listen listen;
+    Death death;
     TimerManager timerManager;
+    WorkQueue workQueue;
     HttpManager httpManager;
     ThreadPool threadPool;
 };

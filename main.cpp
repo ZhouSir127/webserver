@@ -24,8 +24,8 @@ int main()
     };
 
     struct ListenInfo listenInfo{
-        listen::PORT,
-        listen::LISTENET
+        sysListen::PORT,
+        sysListen::LISTENET
     };
 
     struct ThreadPoolInfo threadPoolInfo{

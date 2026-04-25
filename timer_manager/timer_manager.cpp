@@ -71,6 +71,9 @@ void TimerMinHeap::adjust(int fd){
 
 void TimerMinHeap::remove(int fd)
 {    
+    if(fd == 0)
+        pop();
+
     std::unique_lock<std::mutex>Lock(lock);
 
     if(fdToExpireIdx[fd].second == size-1){
@@ -106,15 +109,13 @@ void TimerMinHeap::tick()
 
     time_t now=time(nullptr);
     
-    death.clear();
     while (size > 0)
     {
         int fd = heap[0];
         if (fdToExpireIdx[fd].first > now)
             break;
-        
-        death.push_back(fd);
-        pop();
+    
+        death.add(fd);
     }
 }
 
@@ -150,7 +151,7 @@ void SignalHandler::addSig(int sig, void(*handler)(int), bool restart)
     sigaction(sig, &sa, NULL);
 }
 
-void SignalHandler::dealWithSignal (bool &timeout, bool &stopServer) 
+void SignalHandler::dealWithSignal () 
 {
     char signals[1024];
     ssize_t ret = recv(pipefd[0], signals, sizeof(signals), 0);

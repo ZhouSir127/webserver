@@ -1,5 +1,6 @@
 #include "webserver.h"
 #include "epoll_manager/epoll_manager.h"
+#include "work_queue/work_queue.h"
 
 WebServer::WebServer(
                 const ListenInfo& listenInfo,  
@@ -7,68 +8,43 @@ WebServer::WebServer(
                 const HttpInfo& httpInfo,
                 const SqlInfo& sqlInfo,
                 const ThreadPoolInfo& threadPoolInfo,
-                const LogInfo& logInfo
+                const LogInfo& logInfo  
             )
 :listen(listenInfo),
-timerManager(timerInfo),
-httpManager(httpInfo,sqlInfo),
-threadPool(timerManager,httpManager,threadPoolInfo)
+timerManager(timerInfo, death),
+workQueue(threadPoolInfo.maxRequest),
+httpManager(httpInfo,sqlInfo,workQueue,death),
+threadPool(timerManager,httpManager,threadPoolInfo.threadNumer,workQueue)
 {
     Log::init(logInfo.file,logInfo.close);
 }
 
+void WebServer::remove(int fd){
+    EpollManager::getInstance().remove(fd);
+    timerManager.remove(fd);
+    httpManager.remove(fd);
+    close(fd);
+}
+
 void WebServer::eventLoop()
 {
-    bool timeout = false;
-    bool stopServer = false;
-    
     do{
         int number = EpollManager::getInstance().wait();
         if (number < 0 ){
-            if(errno != EINTR)
-            {
+            if(errno != EINTR){
                 LOG_ERROR("%s", "epoll failure");
                 break;
-            }
-            continue;
+            }    
         }
-
-            // if (event.data.fd == listenFd){
-            //     if (event.events & EPOLLIN)
-            //         acceptNewConnection();//读，错误事件
-            // }else if ( event.data.fd == timerManager.getPipeReadFd() ){
-            //     if(event.events & EPOLLIN )
-            //         timerManager.dealWithSignal(timeout,stopServer);
-            //     else
-            //         LOG_ERROR("%s", "epoll failure");
-            // }//读，错误
-        //连接套接字：读，写，错误事件
-        //     else if(event.events & EPOLLIN)
-        //         threadPool.append(event.data.fd, false);
-        //     else if(event.events & EPOLLOUT)
-        //         threadPool.append(event.data.fd, true);
-        //     else{    
-        //         epollManager.remove(event.data.fd);
-        //         timerManager.remove(event.data.fd);
-        //         httpManager.remove(event.data.fd);
-        //         close(event.data.fd);
-        //     }
-        // }
-        
-        if (timeout){
+        if (timerManager.getTimeout() ){
             timerManager.timerHandler();
             
-            for(int fd : timerManager.getDeath() ){
-                EpollManager::getInstance().remove(fd);
-                httpManager.remove(fd);
-                close(fd);
-
+            for(int fd : death.getDeath() ){
+                remove(fd);
                 LOG_INFO("close fd %d", fd);
             }
-
             LOG_INFO("%s", "timer tick");
-
-            timeout = false;
         }
-    }while (stopServer==false);
+        
+    }while (timerManager.getStopServer() == false);
 }
