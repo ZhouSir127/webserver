@@ -23,16 +23,6 @@ struct TimerInfo{
     unsigned int timeSlot;
 };
 
-struct EpollInfo{
-    bool isListenEt;
-    bool isConnectEt;
-};
-
-struct ServerInfo{
-    uint16_t port; 
-    bool  isListenEt;
-};
-
 struct ThreadPoolInfo{
     size_t threadNumer;
     size_t maxRequest;
@@ -41,6 +31,11 @@ struct ThreadPoolInfo{
 struct LogInfo{
     const std::string&file;
     bool close;
+};
+
+struct ListenInfo{
+    uint16_t port;
+    bool isListenEt;
 };
 
 #endif

@@ -8,8 +8,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <cassert>
-#include <memory>
-#include "epoll_manager/epoll_manager.h"
+#include "listen/listen.h"
 #include "timer_manager/timer_manager.h"
 #include "http_conn/http_conn.h"
 #include "thread_pool/thread_pool.h"
@@ -19,28 +18,19 @@ class WebServer
 {
 public:
 WebServer(
-        const ServerInfo& serverInfo,
-        const EpollInfo& epollInfo,
+        const ListenInfo& listenInfo,
         const TimerInfo& timerInfo,
         const HttpInfo& httpInfo,
         const SqlInfo& sqlInfo,
         const ThreadPoolInfo& threadPoolInfo,
         const LogInfo& logInfo
         );
-    ~WebServer();
-    void eventListen();
+    
     void eventLoop();
     
 private:
     
-    bool acceptNewConnection();
-
-    uint16_t port;
-    bool isListenEt;
-    int listenFd;
-    std::unique_ptr<Channel> listenChannel;
-
-    EpollManager epollManager;
+    Listen listen;
     TimerManager timerManager;
     HttpManager httpManager;
     ThreadPool threadPool;

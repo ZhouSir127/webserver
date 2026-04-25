@@ -34,15 +34,15 @@ void ThreadPool::run()
         }
 
         if ( !isEpollOut )
-            switch(httpManager.process(fd) ){//读处理后，无需响应直接关
+            switch(httpManager.process(fd) ){//读处理后，无需响应直接关闭
                 case HttpCode::CLOSED_CONNECTION:
-                    epollManager.remove(fd);
+            //        EpollManager::getInstance().remove(fd);
                     timerManager.remove(fd);
                     httpManager.remove(fd);
                     close(fd);
                     break;
                 case HttpCode::NO_REQUEST://继续读
-                    epollManager.modify(fd,EPOLLIN);
+                    //EpollManager::getInstance().modify(fd,EPOLLIN);
                     timerManager.adjust(fd);
                     break;
                 case HttpCode::GET_REQUEST://读处理后需要响应
@@ -50,7 +50,7 @@ void ThreadPool::run()
                 case HttpCode::NO_RESOURCE:
                 case HttpCode::FORBIDDEN_REQUEST:
                 case HttpCode::FILE_REQUEST:
-                    epollManager.modify(fd,::EPOLLOUT);
+                    //EpollManager::getInstance().modify(fd,::EPOLLOUT);
                     timerManager.adjust(fd);
                     break;
                 default: // 满足 -Wswitch-default，处理预料之外的情况
@@ -60,14 +60,14 @@ void ThreadPool::run()
             HttpCode ret = httpManager.write(fd);
     
             if ( ret == HttpCode::NO_REQUEST ){//继续写
-                epollManager.modify(fd,EPOLLOUT);
+        //        EpollManager::getInstance().modify(fd,EPOLLOUT);
                 timerManager.adjust(fd);
             }else if ( ret == HttpCode::GET_REQUEST && httpManager.getLinger(fd) ){
-                epollManager.modify(fd,EPOLLIN);
+        //        EpollManager::getInstance() .modify(fd,EPOLLIN);
                 timerManager.adjust(fd);
                 httpManager.init(fd);
             }else{
-                epollManager.remove(fd);
+        //        EpollManager::getInstance().remove(fd);
                 timerManager.remove(fd);
                 httpManager.remove(fd);
                 close(fd);

@@ -23,15 +23,9 @@ int main()
         timer::TIMESLOT
     };
 
-    struct EpollInfo epollInfo{
-        webserver::LISTENET,
-        http::CONNECTET
-    };
-
-    struct ServerInfo ServerInfo{
-        webserver::PORT,
-        webserver::LISTENET,
-        
+    struct ListenInfo listenInfo{
+        listen::PORT,
+        listen::LISTENET
     };
 
     struct ThreadPoolInfo threadPoolInfo{
@@ -45,16 +39,12 @@ int main()
     };
 
     WebServer server(
-            ServerInfo,
-            epollInfo,
+            listenInfo,
             timerInfo,
             httpInfo,sqlInfo,
             threadPoolInfo,
             logInfo
         );
-    //监听
-    server.eventListen();
-
     //运行
     server.eventLoop();
 

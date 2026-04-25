@@ -43,10 +43,7 @@ int EpollManager::add(Channel*channel)
 int EpollManager::modify(Channel*channel)
 {
     epoll_event event;
-
     event.events = channel -> getEvents();
-    event.data.ptr = channel;
-
     return epoll_ctl(epollFd, EPOLL_CTL_MOD, channel -> getFd(), &event);
 }
 
