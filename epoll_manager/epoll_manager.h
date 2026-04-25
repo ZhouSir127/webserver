@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include "../consts.h"
 #include "../args.h"
+#include "../channel/channel.h"
 
 class EpollManager{
 
@@ -19,17 +20,11 @@ private:
     static int setNonBlocking(int fd);
 
 public:
-    enum class FdType :unsigned char{
-        LISTEN,
-        PIPE,
-        CONNECTION
-    };
     
     //对文件描述符设置非阻塞
     EpollManager(const EpollInfo& epollInfo):epollFd(epoll_create1(0)),isListenEt(epollInfo.isListenEt),isConnectEt(epollInfo.isConnectEt){
-        if (epollFd == -1) {
+        if (epollFd == -1) 
             exit(EXIT_FAILURE);
-        }
     }
     
     ~EpollManager(){
@@ -37,14 +32,10 @@ public:
     }
     
     //将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
-    int add(int fd,FdType type);
+    int add(Channel* channel);
     int remove(int fd);
-    int modify(int fd, int ev);
-    int wait(int timeoutMs = -1);
-
-    const epoll_event& getEvent(int idx)const{
-        return events[idx];
-    }
+    int modify(Channel* channel);
+    bool wait(int timeoutMs = -1);
 };
 
 #endif 

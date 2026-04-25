@@ -1,6 +1,6 @@
 #include "webserver.h"
 #include "epoll_manager/epoll_manager.h"
-
+#include "channel/channel.h"
 
 WebServer::WebServer(
                 const ServerInfo& serverInfo,  
@@ -30,9 +30,18 @@ void WebServer::eventListen()
 {
     //网络编程基础步骤
     listenFd = socket(PF_INET, SOCK_STREAM, 0);
-
     assert(listenFd >= 0);
     
+    listenChannel = std::make_unique<Channel>(
+        listenFd,
+        isListenEt ? (EPOLLIN | EPOLLET) : EPOLLIN,
+        [this](){ acceptNewConnection(); },
+        nullptr,
+        nullptr
+    );
+
+    epollManager.add(listenChannel.get() );
+
     int flag = 1;
     setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
 
@@ -60,7 +69,7 @@ void WebServer::eventListen()
     LOG_INFO("WebServer started successfully, listening on port %d", port);
 }
 
-bool WebServer::dealClientData()
+bool WebServer::acceptNewConnection()
 {
     struct sockaddr_in client_address;
     socklen_t client_addrlength = sizeof(client_address);
@@ -85,7 +94,7 @@ bool WebServer::dealClientData()
             return false;
         }
         
-        epollManager.add(connfd,EpollManager::FdType::CONNECTION);
+        epollManager.add();
         timerManager.add(connfd);
         httpManager.add(connfd);
     }
@@ -114,8 +123,8 @@ bool WebServer::dealClientData()
 
 void WebServer::eventLoop()
 {
-    epollManager.add(listenFd,EpollManager::FdType::LISTEN);
-    epollManager.add(timerManager.getPipeReadFd(), EpollManager::FdType::PIPE);
+        
+    epollManager.add();
 
     bool timeout = false;
     bool stopServer = false;
@@ -131,30 +140,27 @@ void WebServer::eventLoop()
             continue;
         }
 
-        for (int i = 0; i < number ; i++){
-            const epoll_event&event=epollManager.getEvent(i);
-
-            if (event.data.fd == listenFd){
-                if (event.events & EPOLLIN)
-                    dealClientData();
-                else
-                    LOG_ERROR("%s", "epoll failure");
-            }else if ( event.data.fd == timerManager.getPipeReadFd() ){
-                if(event.events & EPOLLIN )
-                    timerManager.dealWithSignal(timeout,stopServer);
-                else
-                    LOG_ERROR("%s", "epoll failure");
-            }else if(event.events & EPOLLIN)
-                threadPool.append(event.data.fd, false);
-            else if(event.events & EPOLLOUT)
-                threadPool.append(event.data.fd, true);
-            else{    
-                epollManager.remove(event.data.fd);
-                timerManager.remove(event.data.fd);
-                httpManager.remove(event.data.fd);
-                close(event.data.fd);
-            }
-        }
+            // if (event.data.fd == listenFd){
+            //     if (event.events & EPOLLIN)
+            //         acceptNewConnection();//读，错误事件
+            // }else if ( event.data.fd == timerManager.getPipeReadFd() ){
+            //     if(event.events & EPOLLIN )
+            //         timerManager.dealWithSignal(timeout,stopServer);
+            //     else
+            //         LOG_ERROR("%s", "epoll failure");
+            // }//读，错误
+        //连接套接字：读，写，错误事件
+        //     else if(event.events & EPOLLIN)
+        //         threadPool.append(event.data.fd, false);
+        //     else if(event.events & EPOLLOUT)
+        //         threadPool.append(event.data.fd, true);
+        //     else{    
+        //         epollManager.remove(event.data.fd);
+        //         timerManager.remove(event.data.fd);
+        //         httpManager.remove(event.data.fd);
+        //         close(event.data.fd);
+        //     }
+        // }
         
         if (timeout){
             timerManager.timerHandler();

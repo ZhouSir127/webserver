@@ -87,14 +87,17 @@ void TimerMinHeap::remove(int fd)
     fdToExpireIdx[fd] = {-1,-1};
     
     if (!keep(idx) )
-    for(int parent = (idx-1)>>1; parent >= 0; idx = parent, parent = (parent-1)>>1){
+
+    while(idx > 0){
+        int parent = (idx-1) >> 1;
         if(fdToExpireIdx[heap[parent] ].first > fdToExpireIdx[heap[idx] ].first ){
             std::swap(heap[parent], heap[idx]);
             fdToExpireIdx[heap[parent]].second = parent;
             fdToExpireIdx[heap[idx]].second = idx;
         }else 
             break;
-    }    
+        idx = parent;
+    }
 }
 
 void TimerMinHeap::tick()
