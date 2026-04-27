@@ -6,6 +6,7 @@
 #include <string>
 #include <sstream>
 #include <filesystem>  
+#include <strings.h>
 #include "../consts.h"
 
 
@@ -171,13 +172,13 @@ HttpCode HttpConn::parseHeaders()
     {
         checkState = CheckState::CHECK_STATE_CONTENT;       
         return HttpCode::GET_REQUEST;
-    }else if (line.compare(0, 11 ,"Connection:") == 0){
+    }else if (strncasecmp(line.c_str() ,"Connection:",11) == 0){
         size_t pos = line.find_first_not_of ( " \t" , 11 );
         if(pos == std::string::npos)
             return HttpCode::BAD_REQUEST;
-        if ( line.compare(pos, 10 , "keep-alive") == 0)
+        if ( strncasecmp(line.c_str()+pos, "keep-alive", 10) == 0)
             isLinger = true;
-    }else if (line.compare(0 , 15 , "Content-Length:") == 0){
+    }else if (strncasecmp(line.c_str(), "Content-Length:",15) == 0){
         size_t pos = line.find_first_not_of ( " \t" , 15 );
         if(pos == std::string::npos)
             return HttpCode::BAD_REQUEST;

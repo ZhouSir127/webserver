@@ -206,11 +206,11 @@ Router::Router(const SqlInfo &sqlInfo)
              std::string name, password;
              std::istringstream iss(conn->requestBody);
 
-             if (!(iss >> name))
-               return;
-             if (!(iss >> password))
-               return;
-
+             if (!(iss >> name) || !(iss >> password)){
+                conn->realFilePath = conn->root + "/registerError.html";
+                LOG_ERROR("Payload 解析失败，内容: %s", conn->requestBody.c_str());
+                return;
+             } 
              if (user.exists(name) == false) {
                if (user.add(name, password)) {
                  conn->realFilePath = conn->root + "/log.html";
@@ -229,10 +229,11 @@ Router::Router(const SqlInfo &sqlInfo)
              std::string name, password;
              std::istringstream iss(conn->requestBody);
 
-             if (!(iss >> name))
-               return;
-             if (!(iss >> password))
-               return;
+             if (!(iss >> name) || !(iss >> password)){
+                conn->realFilePath = conn->root + "/logError.html";
+                LOG_ERROR("Payload 解析失败，内容: %s", conn->requestBody.c_str());
+                return;
+             } 
 
              if (user.check(name, password)) {
                conn->realFilePath = conn->root + "/index.html";
