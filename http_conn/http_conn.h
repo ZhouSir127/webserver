@@ -154,11 +154,11 @@ public:
             munmap(fileAddress, fileSize);
             fileAddress = nullptr;
         }
-        EpollManager::getInstance().remove(httpChannel->getFd() );
+        EpollManager::getInstance().remove(httpChannel.get() );
         close(fd);
-
     }
 
+    Channel*getChannel() const { return httpChannel.get(); }
     void init();
     HttpCode process();
     HttpCode write();
@@ -204,6 +204,7 @@ public:
         std::shared_ptr<HttpConn> conn = fdToConn[fd];
         return conn;
     }
+    bool getConnectEt() const { return isConnectEt; }
 };
 
 

@@ -37,8 +37,8 @@ public:
     }
     //将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
     int add(Channel* channel, uint32_t events);
-    int remove(int fd);
-    int modify(int fd, uint32_t events);
+    int remove(Channel*channel);
+    int modify(Channel*channel, uint32_t events);
     int wait(int timeoutMs = -1);
 };
 

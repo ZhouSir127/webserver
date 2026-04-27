@@ -70,8 +70,8 @@ public:
     }
     
     ~Listen(){
+        EpollManager::getInstance().remove(listenChannel.get() );
         close(listenFd);
-        EpollManager::getInstance().remove(listenChannel->getFd() );
     }
 };
 

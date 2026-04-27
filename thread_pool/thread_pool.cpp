@@ -20,7 +20,7 @@ void ThreadPool::run()
                     httpManager.remove(work.first);
                     break;
                 case HttpCode::NO_REQUEST://继续读
-                    EpollManager::getInstance().modify(work.first, EPOLLIN);
+                    EpollManager::getInstance().modify(conn->getChannel(), EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (httpManager.getConnectEt() ? EPOLLET : static_cast<uint32_t>(0)) );
                     timerManager.adjust(work.first);
                     break;
                 case HttpCode::GET_REQUEST://读处理后需要响应
@@ -28,7 +28,7 @@ void ThreadPool::run()
                 case HttpCode::NO_RESOURCE:
                 case HttpCode::FORBIDDEN_REQUEST:
                 case HttpCode::FILE_REQUEST:
-                    EpollManager::getInstance().modify(work.first,::EPOLLOUT);
+                    EpollManager::getInstance().modify(conn->getChannel(), ::EPOLLOUT);
                     timerManager.adjust(work.first);
                     break;
                 default: // 满足 -Wswitch-default，处理预料之外的情况
@@ -38,10 +38,10 @@ void ThreadPool::run()
             HttpCode ret = conn->write();
     
             if ( ret == HttpCode::NO_REQUEST ){//继续写
-                EpollManager::getInstance().modify(work.first, EPOLLOUT);
+                EpollManager::getInstance().modify(conn->getChannel(), EPOLLOUT);
                 timerManager.adjust(work.first);
             }else if ( ret == HttpCode::GET_REQUEST && conn->getLinger() ){
-                EpollManager::getInstance() .modify(work.first, EPOLLIN);
+                EpollManager::getInstance() .modify(conn->getChannel(), EPOLLIN);
                 timerManager.adjust(work.first);
                 conn->init();
             }else{

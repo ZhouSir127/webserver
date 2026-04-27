@@ -22,17 +22,18 @@ int EpollManager::add(Channel*channel, uint32_t events)
     return epoll_ctl(epollFd, EPOLL_CTL_ADD, channel -> getFd(), &event);    
 }
 
-int EpollManager::modify(int fd, uint32_t events)
+int EpollManager::modify(Channel*channel, uint32_t events)
 {
     epoll_event event;
     event.events = events;
-    return epoll_ctl(epollFd, EPOLL_CTL_MOD, fd, &event);
+    event.data.ptr = channel;
+    return epoll_ctl(epollFd, EPOLL_CTL_MOD, channel -> getFd(), &event);
 }
 
 //从内核时间表删除描述符
-int EpollManager::remove(int fd)
+int EpollManager::remove(Channel*channel)
 {
-    return epoll_ctl(epollFd, EPOLL_CTL_DEL, fd, 0);
+    return epoll_ctl(epollFd, EPOLL_CTL_DEL, channel -> getFd(), 0);
 }
 
 int EpollManager::wait(int timeoutMs)

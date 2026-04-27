@@ -86,7 +86,7 @@ public:
     static void clean() {
         close(pipefd[1]);
         close(pipefd[0]);
-        EpollManager::getInstance().remove(signalChannel->getFd() );
+        EpollManager::getInstance().remove(signalChannel.get() );
     }
 
     static bool getTimeout() { 
