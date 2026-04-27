@@ -20,9 +20,13 @@ public:
         deathSet.clear();
     }
 
-    const std::unordered_set<int>& getDeath() {
+    std::unordered_set<int> getDeath(){
         std::unique_lock<std::mutex>Lock(lock);
-        return deathSet;
+        
+        std::unordered_set<int> tmp = deathSet;
+
+        deathSet.clear();
+        return tmp;
     }
 };
 

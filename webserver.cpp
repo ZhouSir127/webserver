@@ -37,13 +37,12 @@ void WebServer::eventLoop()
         }
         if (timerManager.getTimeout() ){
             timerManager.timerHandler();
-            
-            for(int fd : death.getDeath() ){
-                remove(fd);
-                LOG_INFO("close fd %d", fd);
-            }
             LOG_INFO("%s", "timer tick");
         }
-        
+        for(int fd : death.getDeath() ){
+            remove(fd);
+            LOG_INFO("close fd %d", fd);
+        }
+            
     }while (timerManager.getStopServer() == false);
 }

@@ -71,9 +71,9 @@ void TimerMinHeap::adjust(int fd){
 
 void TimerMinHeap::remove(int fd)
 {    
-    if(fd == 0)
-        pop();
-
+    if (fdToExpireIdx[fd].second == (size_t)-1)
+        return; 
+    
     std::unique_lock<std::mutex>Lock(lock);
 
     if(fdToExpireIdx[fd].second == size-1){
@@ -90,7 +90,6 @@ void TimerMinHeap::remove(int fd)
     fdToExpireIdx[fd] = {-1,-1};
     
     if (!keep(idx) )
-
     while(idx > 0){
         int parent = (idx-1) >> 1;
         if(fdToExpireIdx[heap[parent] ].first > fdToExpireIdx[heap[idx] ].first ){
@@ -116,6 +115,7 @@ void TimerMinHeap::tick()
             break;
     
         death.add(fd);
+        pop();
     }
 }
 

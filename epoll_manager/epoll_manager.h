@@ -39,7 +39,7 @@ public:
     int add(Channel* channel, uint32_t events);
     int remove(int fd);
     int modify(int fd, uint32_t events);
-    bool wait(int timeoutMs = -1);
+    int wait(int timeoutMs = -1);
 };
 
 #endif 
