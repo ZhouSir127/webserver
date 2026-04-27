@@ -155,6 +155,8 @@ public:
             fileAddress = nullptr;
         }
         EpollManager::getInstance().remove(httpChannel->getFd() );
+        close(fd);
+
     }
 
     void init();
@@ -169,11 +171,12 @@ class HttpManager{
 private:
 
 bool isConnectEt;
-std::vector<std::unique_ptr<HttpConn> > fdToConn;
+std::vector<std::shared_ptr<HttpConn> > fdToConn;
 Router router;
 const std::string&root;
 WorkQueue& workQueue;
 Death& death;
+std::mutex lock;
 
 public:
     HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo,WorkQueue& workQueue,Death& death)
@@ -186,27 +189,20 @@ public:
     {}
     
     void add(int fd){
-        fdToConn[fd]=std::make_unique<HttpConn>(isConnectEt,fd,death,workQueue,router,root);
+        std::lock_guard<std::mutex> lockGuard(lock);
+        fdToConn[fd]=std::make_shared<HttpConn>(isConnectEt,fd,death,workQueue,router,root);
     }    
     //关闭连接，关闭一个连接，客户总量减一
     void remove(int fd){
-        fdToConn[fd].reset();
+        std::lock_guard<std::mutex> lockGuard(lock);
+        if(fdToConn[fd])
+            fdToConn[fd].reset();
     }
 
-    HttpCode process(int fd){
-        return fdToConn[fd]->process();
-    } 
-
-    HttpCode write(int fd){
-        return fdToConn[fd]->write();
-    }
-
-    bool getLinger(int fd){
-        return fdToConn[fd]->getLinger();
-    }
-
-    void init(int fd){
-        fdToConn[fd]->init();
+    std::shared_ptr<HttpConn> getSharedConn(int fd){
+        std::lock_guard<std::mutex> lockGuard(lock);
+        std::shared_ptr<HttpConn> conn = fdToConn[fd];
+        return conn;
     }
 };
 

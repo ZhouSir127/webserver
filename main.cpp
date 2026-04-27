@@ -3,7 +3,6 @@
 
 int main()
 {
-
     struct SqlInfo sqlInfo{
         mysql::IP,
         mysql::PORT,

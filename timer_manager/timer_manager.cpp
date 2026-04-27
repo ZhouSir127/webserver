@@ -8,6 +8,8 @@
 #include <algorithm>
 
 bool TimerMinHeap::keep(size_t idx){
+    std::unique_lock<std::mutex>Lock(lock);
+    
     size_t leftIdx((idx<<1)+1);
     
     if (leftIdx >= size ) 
@@ -45,6 +47,8 @@ bool TimerMinHeap::keep(size_t idx){
 }
 
 void TimerMinHeap::pop(){
+    std::unique_lock<std::mutex>Lock(lock);
+
     fdToExpireIdx[heap[0]] = {-1,-1};
     
     if(--size > 0){
@@ -71,11 +75,11 @@ void TimerMinHeap::adjust(int fd){
 
 void TimerMinHeap::remove(int fd)
 {    
-    if (fdToExpireIdx[fd].second == (size_t)-1)
+    std::unique_lock<std::mutex>Lock(lock);
+    
+    if (fdToExpireIdx[fd].second == -1)
         return; 
     
-    std::unique_lock<std::mutex>Lock(lock);
-
     if(fdToExpireIdx[fd].second == size-1){
         fdToExpireIdx[fd] = {-1,-1};
         --size;

@@ -22,7 +22,6 @@ listen(listenInfo, timerManager, httpManager)
 void WebServer::remove(int fd){
     timerManager.remove(fd);
     httpManager.remove(fd);
-    close(fd);
 }
 
 void WebServer::eventLoop()
