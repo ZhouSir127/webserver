@@ -2,35 +2,37 @@
 #define _CONNECTION_POOL_
 
 #include <deque>
-#include <mysql/mysql.h>
+#include <cppconn/connection.h> 
 #include <error.h>
 #include <semaphore.h>
 #include <mutex>
+#include <memory>
 #include "../args.h"
 
 class ConnectionPool
 {
 public:
-	MYSQL *getConnection();				 //获取数据库连接
-	bool releaseConnection(MYSQL *conn); //释放连接
-	//int getFreeConn();					 //获取连接
+	std::unique_ptr<sql::Connection> getConnection();				 //获取数据库连接
+	bool releaseConnection(std::unique_ptr<sql::Connection> conn); //释放连接
 	
 	ConnectionPool(const SqlInfo& sqlInfo);
 	~ConnectionPool();
 private:
 	std::mutex lock;
-	std::deque <MYSQL *> connQueue; //连接池
+	std::deque <std::unique_ptr<sql::Connection> > connQueue; //连接池
 	sem_t reserve;
 };
 
 class connectionRAII{
 
 public:
-	connectionRAII(MYSQL * &con, ConnectionPool *connPool);
+	connectionRAII(ConnectionPool *connPool);
 	~connectionRAII();
+
+	sql::Connection* getConnection() const { return conRAII.get(); }
 	
 private:
-	MYSQL *conRAII;
+	std::unique_ptr<sql::Connection> conRAII;
 	ConnectionPool *poolRAII;
 };
 

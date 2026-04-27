@@ -312,7 +312,7 @@ bool HttpConn::processWrite(HttpCode ret)
         (addResponse("HTTP/1.1 ", 200 ,' ',title[200], "\r\n" )&&    
         addResponse("Content-Length: ",fileSize = ioVectors[1].iov_len = bytesToSend = std::filesystem::file_size(realFilePath), "\r\n" ) && 
         addResponse("Content-Type: ", "text/html" , "\r\n") && 
-        addResponse("Connection: " , "close" ,"\r\n") &&
+        addResponse("Connection: " , isLinger ? "keep-alive" : "close" ,"\r\n") &&
         addResponse("\r\n") 
         ) == false
         )return false;
@@ -327,7 +327,7 @@ bool HttpConn::processWrite(HttpCode ret)
         (addResponse("HTTP/1.1 ", 400 ,' ',title[400], "\r\n" ) && 
         addResponse("Content-Length: ", form[400].size(), "\r\n" ) && 
         addResponse("Content-Type: ", "text/plain" , "\r\n") && 
-        addResponse("Connection: " , "close" ,"\r\n") &&
+        addResponse("Connection: " , isLinger ? "keep-alive" : "close" ,"\r\n") &&
         addResponse("\r\n") &&
         addResponse(form[400]) 
         )==false
@@ -337,7 +337,7 @@ bool HttpConn::processWrite(HttpCode ret)
         (addResponse("HTTP/1.1 ", 403 ,' ',title[403], "\r\n" ) && 
         addResponse("Content-Length: ", form[403].size(), "\r\n" ) && 
         addResponse("Content-Type: ", "text/plain" , "\r\n") && 
-        addResponse("Connection: " , "close" ,"\r\n") &&
+        addResponse("Connection: " , isLinger ? "keep-alive" : "close" ,"\r\n") &&
         addResponse("\r\n") && 
         addResponse(form[403]) 
         )==false
@@ -347,7 +347,7 @@ bool HttpConn::processWrite(HttpCode ret)
         (addResponse("HTTP/1.1 ", 404 ,' ',title[404], "\r\n" ) && 
         addResponse("Content-Length: ", form[404].size(), "\r\n" ) && 
         addResponse("Content-Type: ", "text/plain" , "\r\n") && 
-        addResponse("Connection: " , "close" ,"\r\n") &&
+        addResponse("Connection: " , isLinger ? "keep-alive" : "close" ,"\r\n") &&
         addResponse("\r\n") &&
         addResponse(form[404]) 
         )==false
@@ -370,7 +370,7 @@ HttpCode HttpConn::process(){
     if (read_ret == HttpCode::NO_REQUEST || read_ret == HttpCode::CLOSED_CONNECTION )
         return read_ret;
     
-    if( read_ret != HttpCode::GET_REQUEST )
+    if( !(read_ret == HttpCode::GET_REQUEST || read_ret == HttpCode::FILE_REQUEST ) )
         isLinger = false;
     //GET_REQUEST || BAD_REQUEST || NO_RESOURCE || FORBIDDEN_REQUEST || FILE_REQUEST || INTERNAL_ERROR
     if ( !processWrite(read_ret) )
