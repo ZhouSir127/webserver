@@ -245,26 +245,38 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
 
 void Router::route(HttpConn *conn){
 
+  if(conn->url == "/register" || conn->url == "/login" || conn->url == "/"){
+    if (conn->method == HttpMethod::GET) {
+      std::unordered_map<std::string, HttpHandler>::const_iterator it = getRoutes.find(conn->url);
+      if (it != getRoutes.end())
+        it->second(conn);
+    } else if (conn->method == HttpMethod::POST) {
+      std::unordered_map<std::string, HttpHandler>::const_iterator it = postRoutes.find(conn->url);
+      if (it != postRoutes.end())
+        it->second(conn);
+    }
+    return;
+  }
+
   bool invalid = conn->cookie.empty();
+  std::string token;
   if(invalid == false){
-      std::string token;
       size_t pos = conn->cookie.find("token=");
       if (pos != std::string::npos){
-        token = conn->cookie.substr(pos += 6); 
-        size_t endPos = token.find(';',pos);
+        pos += 6; 
+        size_t endPos = conn->cookie.find(';',pos);
         if (endPos != std::string::npos)
             token = conn->cookie.substr(pos, endPos - pos);
         else
-            invalid = true;  
+            token = conn->cookie.substr(pos);  
       }else
         invalid = true;
-    
-    if(invalid || user.verify(token) == false ){
-      auto it = getRoutes.find("/");
-      if (it != getRoutes.end())
-        it->second(conn);
-      return;
-    }
+  }  
+  if(invalid || user.verify(token) == false ){
+    auto it = getRoutes.find("/");
+    if (it != getRoutes.end())
+      it->second(conn);
+    return;
   }
   
   if (conn->method == HttpMethod::GET) {

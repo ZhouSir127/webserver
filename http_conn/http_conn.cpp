@@ -315,7 +315,7 @@ bool HttpConn::processWrite(HttpCode ret)
         addResponse("Content-Length: ",fileSize = ioVectors[1].iov_len = bytesToSend = std::filesystem::file_size(realFilePath), "\r\n" ) && 
         addResponse("Content-Type: ", "text/html" , "\r\n") && 
         addResponse("Connection: " , isLinger ? "keep-alive" : "close" ,"\r\n") &&
-        ( !token.empty() ? addResponse("Set-Cookie: session_id=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
+        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
         addResponse("\r\n") 
         ) == false
         )return false;
@@ -331,7 +331,7 @@ bool HttpConn::processWrite(HttpCode ret)
         addResponse("Content-Length: ", form[400].size(), "\r\n" ) && 
         addResponse("Content-Type: ", "text/plain" , "\r\n") && 
         addResponse("Connection: " , isLinger ? "keep-alive" : "close" ,"\r\n") &&
-        ( !token.empty() ? addResponse("Set-Cookie: session_id=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
+        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
         addResponse("\r\n") &&
         addResponse(form[400]) 
         )==false
@@ -342,7 +342,7 @@ bool HttpConn::processWrite(HttpCode ret)
         addResponse("Content-Length: ", form[403].size(), "\r\n" ) && 
         addResponse("Content-Type: ", "text/plain" , "\r\n") && 
         addResponse("Connection: " , isLinger ? "keep-alive" : "close" ,"\r\n") &&
-        ( !token.empty() ? addResponse("Set-Cookie: session_id=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
+        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
         addResponse("\r\n") && 
         addResponse(form[403]) 
         )==false
@@ -353,14 +353,14 @@ bool HttpConn::processWrite(HttpCode ret)
         addResponse("Content-Length: ", form[404].size(), "\r\n" ) && 
         addResponse("Content-Type: ", "text/plain" , "\r\n") && 
         addResponse("Connection: " , isLinger ? "keep-alive" : "close" ,"\r\n") &&
-        ( !token.empty() ? addResponse("Set-Cookie: session_id=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
+        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
         addResponse("\r\n") &&
         addResponse(form[404]) 
         )==false
         ) return false;
     }else if(
         (addResponse("HTTP/1.1 ", 200 ,' ',title[200], "\r\n" ) && 
-        ( !token.empty() ? addResponse("Set-Cookie: session_id=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
+        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
         addResponse("\r\n") 
         ) == false
         )return false;

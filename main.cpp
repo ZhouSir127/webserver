@@ -49,7 +49,7 @@ int main()
             timerInfo,
             httpInfo,sqlInfo,redisInfo,
             threadPoolInfo,
-            logInfo,
+            logInfo
         );
     //运行
     server.eventLoop();
