@@ -1,14 +1,9 @@
 #include "http_conn.h"
 
-#include <mysql/mysql.h> 
 #include <algorithm>
-#include <cstdlib>
 #include <string>
-#include <sstream>
-#include <filesystem>  
-#include <strings.h>
 #include "../consts.h"
-
+#include <filesystem>  
 
 std::unordered_map<int,std::string> HttpConn::form {
     {400,"Your request has bad syntax or is inherently impossible to staisfy.\n"}, 
@@ -35,6 +30,7 @@ void HttpConn::init()
     url.clear();
     isLinger = false;
     contentLength = 0;
+    cookie.clear();
     requestBody.clear();
 
     realFilePath.clear();
@@ -173,20 +169,24 @@ HttpCode HttpConn::parseHeaders()
     {
         checkState = CheckState::CHECK_STATE_CONTENT;       
         return HttpCode::GET_REQUEST;
-    }else if (strncasecmp(line.c_str() ,"Connection:",11) == 0){
+    }else if (line.compare(0, 11, "Connection:") == 0){
         size_t pos = line.find_first_not_of ( " \t" , 11 );
         if(pos == std::string::npos)
             return HttpCode::BAD_REQUEST;
-        if ( strncasecmp(line.c_str()+pos, "keep-alive", 10) == 0)
+        if ( line.compare(pos, 10, "keep-alive") == 0)
             isLinger = true;
-    }else if (strncasecmp(line.c_str(), "Content-Length:",15) == 0){
+    }else if (line.compare(0, 15, "Content-Length:") == 0){
         size_t pos = line.find_first_not_of ( " \t" , 15 );
         if(pos == std::string::npos)
             return HttpCode::BAD_REQUEST;
-
         contentLength = std::stoul(std::string(line.begin()+pos , line.end() ) );
+    }else if(line.compare(0, 15, "Cookie:") == 0){
+        size_t pos = line.find_first_not_of ( " \t" , 15 );
+        if(pos == std::string::npos)
+            return HttpCode::BAD_REQUEST;
+        cookie = std::string(line.begin()+pos , line.end() );
     }
-
+    
     return HttpCode::GET_REQUEST;
 }
 
@@ -230,6 +230,7 @@ HttpCode HttpConn::processRead()
 HttpCode HttpConn::doRequest()
 {
     router.route(this);
+    
     if(!realFilePath.empty() ){
         if (!std::filesystem::exists(realFilePath)  ){
             LOG_ERROR("File request Error: NO_RESOURCE (404) for path: %s", realFilePath.c_str());

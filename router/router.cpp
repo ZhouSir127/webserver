@@ -1,6 +1,7 @@
 #include "router.h"
 #include "../http_conn/http_conn.h"
 
+
 Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
     : user(sqlInfo,redisInfo), mavsdkPtr(nullptr), drone(nullptr), action(nullptr),
       telemetry(nullptr),
@@ -242,7 +243,30 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
              }
            }}} {}
 
-void Router::route(HttpConn *conn) {
+void Router::route(HttpConn *conn){
+
+  bool invalid = conn->cookie.empty();
+  if(invalid == false){
+      std::string token;
+      size_t pos = conn->cookie.find("token=");
+      if (pos != std::string::npos){
+        token = conn->cookie.substr(pos += 6); 
+        size_t endPos = token.find(';',pos);
+        if (endPos != std::string::npos)
+            token = conn->cookie.substr(pos, endPos - pos);
+        else
+            invalid = true;  
+      }else
+        invalid = true;
+    
+    if(invalid || user.verify(token) == false ){
+      auto it = getRoutes.find("/");
+      if (it != getRoutes.end())
+        it->second(conn);
+      return;
+    }
+  }
+  
   if (conn->method == HttpMethod::GET) {
     auto it = getRoutes.find(conn->url);
     if (it != getRoutes.end())

@@ -65,7 +65,6 @@ enum class HttpCode
     CLOSED_CONNECTION
 };
 
-
 class HttpConn
 {
 private:
@@ -117,6 +116,7 @@ private:
     std::string url;
     bool isLinger;
     size_t contentLength;
+    std::string cookie; 
     std::string requestBody;
 
     Router &router;

@@ -57,14 +57,25 @@ public:
                 return token;
             }else
                 return "";
-            
         }catch(sql::SQLException &e){
             LOG_ERROR("SQL error: %s", e.what());
             return "";
         }
     }
-
-
+    bool verify(const std::string& token){
+        try{
+            std::shared_ptr<sw::redis::Redis> redis = redisPool.getRedis();
+            std::optional<std::string>name = redis->get(token);
+            if(name){
+                redis -> expire(token, 3600);
+                return true;
+            }else
+                return false;
+        }catch(const sw::redis::Error &e){
+            LOG_ERROR("Redis error: %s", e.what());
+            return false;
+        }
+    }
 };
 
 
