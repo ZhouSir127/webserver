@@ -37,12 +37,19 @@ int main()
         sysLog::CLOSE
     };
 
+    struct RedisInfo redisInfo{
+        redis::IP,
+        redis::PORT,
+        redis::PASSWORD,
+        redis::NUM
+    };
+
     WebServer server(
             listenInfo,
             timerInfo,
-            httpInfo,sqlInfo,
+            httpInfo,sqlInfo,redisInfo,
             threadPoolInfo,
-            logInfo
+            logInfo,
         );
     //运行
     server.eventLoop();

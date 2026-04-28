@@ -6,13 +6,13 @@ WebServer::WebServer(
                 const ListenInfo& listenInfo,  
                 const TimerInfo& timerInfo,
                 const HttpInfo& httpInfo,
-                const SqlInfo& sqlInfo,
+                const SqlInfo& sqlInfo,const RedisInfo& redisInfo,
                 const ThreadPoolInfo& threadPoolInfo,
                 const LogInfo& logInfo  
             )
 :timerManager(timerInfo, death),
 workQueue(threadPoolInfo.maxRequest),
-httpManager(httpInfo,sqlInfo,workQueue,death),
+httpManager(httpInfo,sqlInfo,redisInfo,workQueue,death),
 threadPool(timerManager,httpManager,threadPoolInfo.threadNumer,workQueue),
 listen(listenInfo, timerManager, httpManager)
 {

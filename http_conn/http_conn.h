@@ -122,6 +122,7 @@ private:
     Router &router;
     const std::string&root;
     std::string realFilePath;
+    std::string token;
 
     std::string writeBuffer;
     size_t bytesToSend;
@@ -179,10 +180,10 @@ Death& death;
 std::mutex lock;
 
 public:
-    HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo,WorkQueue& workQueue,Death& death)
+    HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo,const RedisInfo& redisInfo,WorkQueue& workQueue,Death& death)
     :isConnectEt(httpInfo.isConnectEt),
     fdToConn(1+consts::MAX_FD),
-    router(sqlInfo),
+    router(sqlInfo,redisInfo),
     root(httpInfo.root),
     workQueue(workQueue),
     death(death)

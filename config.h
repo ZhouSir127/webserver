@@ -38,4 +38,11 @@ namespace sysLog{
     const bool CLOSE = false;
 }
 
+namespace redis{
+    const std::string IP = "127.0.0.1";
+    const int PORT = 6379;
+    const std::string PASSWORD = "4399";
+    const int NUM = 8;
+}
+
 #endif

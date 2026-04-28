@@ -1,8 +1,8 @@
 #include "router.h"
 #include "../http_conn/http_conn.h"
 
-Router::Router(const SqlInfo &sqlInfo)
-    : user(sqlInfo), mavsdkPtr(nullptr), drone(nullptr), action(nullptr),
+Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
+    : user(sqlInfo,redisInfo), mavsdkPtr(nullptr), drone(nullptr), action(nullptr),
       telemetry(nullptr),
       getRoutes{
           {"/",
@@ -211,14 +211,9 @@ Router::Router(const SqlInfo &sqlInfo)
                 LOG_ERROR("Payload 解析失败，内容: %s", conn->requestBody.c_str());
                 return;
              } 
-             if (user.exists(name) == false) {
-               if (user.add(name, password)) {
+             if (user.add(name, password) ){
                  conn->realFilePath = conn->root + "/log.html";
                  LOG_INFO("User Register Success: %s", name.c_str());
-               } else {
-                 conn->realFilePath = conn->root + "/registerError.html";
-                 LOG_ERROR("User Register Failed (DB Error): %s", name.c_str());
-               }
              } else {
                conn->realFilePath = conn->root + "/registerError.html";
                LOG_ERROR("User Register Failed (User Exists): %s",
@@ -235,7 +230,9 @@ Router::Router(const SqlInfo &sqlInfo)
                 return;
              } 
 
-             if (user.check(name, password)) {
+             conn->token = user.login(name, password);
+
+             if (!conn->token.empty()) {
                conn->realFilePath = conn->root + "/index.html";
                LOG_INFO("User Login Success: %s", name.c_str());
              } else {

@@ -29,7 +29,7 @@ private:
     std::unordered_map<std::string,HttpHandler> postRoutes;
     std::mutex lock;
 public:
-    Router(const SqlInfo&);
+    Router(const SqlInfo&,const RedisInfo&);
     void route(HttpConn* conn);
 };
 

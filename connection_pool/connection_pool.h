@@ -1,10 +1,10 @@
 #ifndef _CONNECTION_POOL_
 #define _CONNECTION_POOL_
 
-#include <deque>
+#include <queue>
 #include <cppconn/connection.h> 
 #include <error.h>
-#include <semaphore.h>
+#include <condition_variable>
 #include <mutex>
 #include <memory>
 #include "../args.h"
@@ -16,11 +16,10 @@ public:
 	bool releaseConnection(std::unique_ptr<sql::Connection> conn); //释放连接
 	
 	ConnectionPool(const SqlInfo& sqlInfo);
-	~ConnectionPool();
 private:
 	std::mutex lock;
-	std::deque <std::unique_ptr<sql::Connection> > connQueue; //连接池
-	sem_t reserve;
+	std::queue <std::unique_ptr<sql::Connection> > connQueue; //连接池
+	std::condition_variable cv; //连接池条件变量
 };
 
 class connectionRAII{

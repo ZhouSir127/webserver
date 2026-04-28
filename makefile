@@ -46,15 +46,18 @@ CXXFLAGS += -Wshadow=local
 # 4. 依赖管理与链接
 # ----------------------------------------------------------------------------
 CXXFLAGS += -MMD -MP
+# ====================== 【修改 1：添加 redis++ 头文件路径】 ======================
+CXXFLAGS += -I/usr/local/include
 CXXFLAGS += -I/usr/include/mavsdk
 
 # 链接库
-LDFLAGS  := -pthread -lmysqlclient -lmavsdk
+# ====================== 【修改 2：添加 redis++ 依赖库】 ======================
+LDFLAGS  := -pthread -lmysqlclient -lmavsdk -lredis++ -lhiredis
 
 # ----------------------------------------------------------------------------
 # 5. 目录与文件自动发现
 # ----------------------------------------------------------------------------
-SRC_DIRS := . log connection_pool thread_pool timer_manager epoll_manager http_conn router listen work_queue
+SRC_DIRS := . log connection_pool thread_pool timer_manager epoll_manager http_conn router listen work_queue redis_pool  # 如果你有redis_pool目录，已加上
 SRCS     := $(foreach dir, $(SRC_DIRS), $(wildcard $(dir)/*.cpp))
 OBJS     := $(patsubst %.cpp, %.o, $(SRCS))
 DEPS     := $(OBJS:.o=.d)

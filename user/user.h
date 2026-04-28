@@ -1,64 +1,70 @@
 #ifndef USER_H
 #define USER_H
-#include <unordered_map>
-#include <mutex>
+
 #include "../connection_pool/connection_pool.h"
-#include <mysql/mysql.h>
+#include <cppconn/prepared_statement.h>
 #include "../log/log.h"
 #include "../args.h"
+#include "../redis_pool/redis_pool.h"
+#include <memory>
 
 class User{
 
 private:
-    std::unordered_map<std::string, std::string> userInfo;
-    std::mutex lock;
     ConnectionPool connPool;
+    RedisPool redisPool;
 public:
-    User(const SqlInfo& sqlInfo)
-    :connPool(sqlInfo){
-        MYSQL *mysql = nullptr;
-        connectionRAII mysqlcon(mysql,&connPool);
-    
-        if (mysql_query(mysql, "SELECT username,passwd FROM user"))
-            LOG_ERROR("SELECT error:%s\n", mysql_error(mysql));
-    
-        MYSQL_RES *result = mysql_store_result(mysql);
-
-        if(!result)
-            throw std::exception();
-        
-        while (MYSQL_ROW row = mysql_fetch_row(result))
-            userInfo[row[0] ] = row[1];
-    
-        mysql_free_result(result); 
+    User(const SqlInfo& sqlInfo,const RedisInfo& redisInfo)
+    :connPool(sqlInfo),redisPool(redisInfo){
+        srand(time(NULL)); 
     }
     
-    bool add(const std::string&name,const std::string&password){
-        MYSQL *mysql=nullptr;
-        connectionRAII mysqlcon(mysql, &connPool);
-        
-        std::string sqlInsert = "INSERT INTO user(username, passwd) VALUES('" 
-                        + name 
-                        + "', '" 
-                        + password 
-                        + "')";
+    bool add(const std::string& name,const std::string& password ) {
+        try{
+            connectionRAII mysqlcon(&connPool);
+            sql::Connection* con = mysqlcon.getConnection();
 
-        if(mysql_query(mysql, sqlInsert.data() ) <0  ) 
+            std::unique_ptr<sql::PreparedStatement> queryPstmt(con->prepareStatement("SELECT username FROM user WHERE username = ?") );
+            queryPstmt -> setString(1,name);
+            std::unique_ptr<sql::ResultSet> res(queryPstmt -> executeQuery());
+            if(res -> next() )
+                return false;
+
+            std::unique_ptr<sql::PreparedStatement> Insertpstmt(con->prepareStatement("INSERT INTO user(username, passwd) VALUES(?, ?)") );
+            Insertpstmt -> setString(1,name);
+            Insertpstmt -> setString(2,password);
+            return Insertpstmt -> executeUpdate() > 0;
+        }catch(sql::SQLException &e){
+            LOG_ERROR("SQL error: %s", e.what());
             return false;
-        std::unique_lock<std::mutex>Lock(lock);
-        userInfo[name]=password;
-        return true;
+        }
     }
-    
-    bool exists(const std::string&name){
-        std::unique_lock <std::mutex>Lock(lock);
-        return userInfo.find(name) != userInfo.end();
+
+    std::string login(const std::string&name,const std::string&password){
+        try{
+            connectionRAII mysqlcon(&connPool);
+            sql::Connection* con = mysqlcon.getConnection();
+
+            std::unique_ptr<sql::PreparedStatement> queryPstmt(con->prepareStatement("SELECT username FROM user WHERE username = ? AND passwd = ?") );
+            queryPstmt -> setString(1,name);
+            queryPstmt -> setString(2,password);
+            std::unique_ptr<sql::ResultSet> res(queryPstmt -> executeQuery());
+            if(res -> next() ){
+                std::shared_ptr<sw::redis::Redis> redis = redisPool.getRedis();
+                std::string token = std::to_string( rand() );
+                redis->setex(token, 3600, name);
+                
+                return token;
+            }else
+                return "";
+            
+        }catch(sql::SQLException &e){
+            LOG_ERROR("SQL error: %s", e.what());
+            return "";
+        }
     }
-    
-    bool check(const std::string&name,const std::string&password){
-        std::unique_lock <std::mutex>Lock(lock);
-        return userInfo.find(name) != userInfo.end() && userInfo[name] == password;
-    }
+
+
 };
 
 

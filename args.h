@@ -13,6 +13,13 @@ struct SqlInfo{
     int num;
 };
 
+struct RedisInfo {
+    const std::string&IP;
+    int port;
+    const std::string&password; 
+    int num;              // 连接池大小
+};
+
 struct HttpInfo{
     bool isConnectEt;
     const std::string&root;
