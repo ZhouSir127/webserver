@@ -27,6 +27,8 @@ WebServer(
         const LogInfo& logInfo
         );
     
+    ~WebServer();
+
     void eventLoop();
     
 private:

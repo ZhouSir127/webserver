@@ -16,12 +16,12 @@ httpManager(httpInfo,sqlInfo,redisInfo,workQueue,death),
 threadPool(timerManager,httpManager,threadPoolInfo.threadNumer,workQueue),
 listen(listenInfo, timerManager, httpManager)
 {
-    Log::init(logInfo.file,logInfo.close);
+    myLog::init(logInfo);
 }
 
-void WebServer::remove(int fd){
-    timerManager.remove(fd);
-    httpManager.remove(fd);
+WebServer::~WebServer()
+{
+    myLog::close();
 }
 
 void WebServer::eventLoop()
@@ -39,7 +39,8 @@ void WebServer::eventLoop()
             LOG_INFO("%s", "timer tick");
         }
         for(int fd : death.getDeath() ){
-            remove(fd);
+            timerManager.remove(fd);
+            httpManager.remove(fd);
             LOG_INFO("close fd %d", fd);
         }
             

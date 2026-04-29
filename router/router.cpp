@@ -1,7 +1,6 @@
 #include "router.h"
 #include "../http_conn/http_conn.h"
 
-
 Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
     : user(sqlInfo,redisInfo), mavsdkPtr(nullptr), drone(nullptr), action(nullptr),
       telemetry(nullptr),

@@ -8,8 +8,6 @@
 #include <algorithm>
 
 bool TimerMinHeap::keep(size_t idx){
-    std::unique_lock<std::mutex>Lock(lock);
-    
     size_t leftIdx((idx<<1)+1);
     
     if (leftIdx >= size ) 
@@ -47,8 +45,6 @@ bool TimerMinHeap::keep(size_t idx){
 }
 
 void TimerMinHeap::pop(){
-    std::unique_lock<std::mutex>Lock(lock);
-
     fdToExpireIdx[heap[0]] = {-1,-1};
     
     if(--size > 0){
@@ -135,12 +131,10 @@ void SignalHandler::sigHandler(int sig)
     //为保证函数的可重入性，保留原来的errno
     int save_errno = errno;
     
-    if(write(pipefd[1], reinterpret_cast<char*>(&sig), 1) < 0){
+    if(write(pipefd[1], reinterpret_cast<char*>(&sig), 1) < 0)
         LOG_ERROR("Failed to write signal to pipe: %s", strerror(errno));
-    }
     
     errno = save_errno;
-    
 }
 
 //设置信号函数

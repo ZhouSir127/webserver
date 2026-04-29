@@ -5,32 +5,64 @@
 #include <string>
 #include <mutex>
 #include <sys/time.h>
+#include <queue>
+#include "../args.h"
+#include <vector>
+#include <chrono>   // C++ 时间库
+#include <ctime>    // 本地时间转换
+#include <condition_variable>
+#include <thread> 
 
-class Log {
-public:
-    // 禁用构造函数，表明这是一个纯静态工具类，不允许任何人 new 它
-    Log() = delete;
+namespace myLog{
 
-    // 全局初始化：仅在 main 函数中调用一次
-    static void init(const std::string& file_name, bool close_log);
+    extern std::vector<std::string>levelVec;
+    extern FILE* fp;
+    extern std::mutex lock;
+    extern std::condition_variable cv;
+    extern bool closeLog;
+    extern std::queue<std::string> logQueue;
+    extern bool isRunning;
+    extern std::thread bgThread;
     
-    // 全局写日志接口
-    static void write_log(int level, const char* format, ...);
+    void init(const LogInfo&logInfo);
     
-    // 优雅关闭：在程序退出前调用（可选）
-    static void close();
+    template<typename... Args>
+    void write(int level,Args&&... args){
+        if (closeLog || fp == nullptr)
+            return;
+        
+        auto now = std::chrono::system_clock::now();
+        std::time_t t = std::chrono::system_clock::to_time_t(now);
+        tm* tm = std::localtime(&t);
 
-private:
-    // 静态成员变量（相当于被类名作用域保护的全局变量）
-    static FILE* s_fp;
-    static std::mutex s_mutex;
-    static bool s_close_log;
+        std::ostringstream oss;
+        oss << std::setfill('0');
+
+    // 拼接：年-月-日 时:分:秒
+        oss << std::setw(4) << (tm->tm_year + 1900) << "-"
+        << std::setw(2) << (tm->tm_mon + 1) << "-"
+        << std::setw(2) << tm->tm_mday << " "
+        << std::setw(2) << tm->tm_hour << ":"
+        << std::setw(2) << tm->tm_min << ":"
+        << std::setw(2) << tm->tm_sec << " "
+        << levelVec[level];
+        
+        (oss << ... << std::forward<Args>(args));    
+        oss << "\n";
+
+        std::unique_lock<std::mutex>Lock(lock);
+        logQueue.push(oss.str());
+        cv.notify_one();
+    }
+
+    void close();
+    void asyncWriter();
+    
 };
 
-
-#define LOG_DEBUG(format, ...) Log::write_log(0, format, ##__VA_ARGS__)
-#define LOG_INFO(format, ...)  Log::write_log(1, format, ##__VA_ARGS__)
-#define LOG_WARN(format, ...)  Log::write_log(2, format, ##__VA_ARGS__)
-#define LOG_ERROR(format, ...) Log::write_log(3, format, ##__VA_ARGS__)
+#define LOG_DEBUG(...)  myLog::write(0, ##__VA_ARGS__)
+#define LOG_INFO(...)   myLog::write(1, ##__VA_ARGS__)
+#define LOG_WARN(...)   myLog::write(2, ##__VA_ARGS__)
+#define LOG_ERROR(...)  myLog::write(3, ##__VA_ARGS__)
 
 #endif // LOG_H

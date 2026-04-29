@@ -30,6 +30,7 @@
 #include "../epoll_manager/epoll_manager.h"
 #include "../channel/channel.h"
 #include "../death/death.h"
+#include <fcntl.h>
 
 class TimerMinHeap
 {
@@ -75,6 +76,7 @@ public:
         );
 
         EpollManager::getInstance().add(signalChannel.get(),EPOLLIN);
+        fcntl(pipefd[1], F_SETFL, fcntl(pipefd[1], F_GETFL) | O_NONBLOCK);
 
         addSig(SIGPIPE, SIG_IGN);
         addSig(SIGALRM, sigHandler);
