@@ -49,14 +49,13 @@ CXXFLAGS += -MMD -MP
 CXXFLAGS += -I/usr/local/include
 CXXFLAGS += -I/usr/include/mavsdk
 
-# 【重大修改】：将 -lmysqlclient 替换为 -lmysqlcppconn，以支持 C++ Connector
-LDFLAGS  := -pthread -lmysqlcppconn -lmavsdk -lredis++ -lhiredis
+LDFLAGS  := -pthread -lmysqlcppconn -lmavsdk -lredis++ -lhiredis -lcrypto
 
 # ----------------------------------------------------------------------------
 # 5. 目录与文件自动发现
 # ----------------------------------------------------------------------------
 # 【重大修改】：确保加入了 user 和 redis_pool 目录
-SRC_DIRS := . log connection_pool thread_pool timer_manager epoll_manager http_conn router listen work_queue redis_pool user
+SRC_DIRS := . channel connection_pool crypto_util death epoll_manager http_conn listen log redis_pool router thread_pool timer_manager user work_queue  
 SRCS     := $(foreach dir, $(SRC_DIRS), $(wildcard $(dir)/*.cpp))
 OBJS     := $(patsubst %.cpp, %.o, $(SRCS))
 DEPS     := $(OBJS:.o=.d)

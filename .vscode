@@ -5,6 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "/usr/include",
+                "/usr/local/include",  
                 "/usr/include/mavsdk",
                 "/usr/include/mavsdk/plugins",
                 "/usr/include/mavsdk/plugins/action"
@@ -13,7 +14,8 @@
             "compilerPath": "/usr/bin/g++",
             "cStandard": "c17",
             "cppStandard": "c++20",
-            "intelliSenseMode": "linux-gcc-x64"
+            "intelliSenseMode": "linux-gcc-x64",
+            "compileCommands": "${workspaceFolder}/compile_commands.json" 
         }
     ],
     "version": 4
