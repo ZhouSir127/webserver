@@ -102,7 +102,7 @@ private:
     const bool isConnectEt;
     const int fd;
     Death& death;
-    WorkQueue& workQueue;
+    WorkQueue<std::pair<int,bool> >& workQueue;
     std::unique_ptr<Channel>httpChannel;
     
     std::string readBuffer;
@@ -136,11 +136,11 @@ private:
     size_t fileSize;   // 专门记录文件大小
     
 public:
-    HttpConn(bool connectET,int fd,Death& death,WorkQueue& workQueue,Router&router,const std::string&root)
+    HttpConn(bool connectET,int fd,Death& death,WorkQueue<std::pair<int,bool> >& workQueue,Router&router,const std::string&root)
     :isConnectEt(connectET),fd(fd),death(death),workQueue(workQueue),httpChannel(std::make_unique<Channel>(
         fd,
-        [this]() ->void { this->workQueue.append(this->fd, false); },
-        [this]() ->void { this->workQueue.append(this->fd, true); },
+        [this]() ->void { this->workQueue.append({this->fd, false}); },
+        [this]() ->void { this->workQueue.append({this->fd, true}); },
         [this](){ this->death.add(this->fd); }
     ) ),
     readBuffer(1024,'\0'),readIdx(0),checkedIdx(0),startIdx(0),
@@ -175,12 +175,12 @@ bool isConnectEt;
 std::vector<std::shared_ptr<HttpConn> > fdToConn;
 Router router;
 const std::string&root;
-WorkQueue& workQueue;
+WorkQueue<std::pair<int,bool> >& workQueue;
 Death& death;
 std::mutex lock;
 
 public:
-    HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo,const RedisInfo& redisInfo,WorkQueue& workQueue,Death& death)
+    HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo,const RedisInfo& redisInfo,WorkQueue<std::pair<int,bool> >& workQueue,Death& death)
     :isConnectEt(httpInfo.isConnectEt),
     fdToConn(1+consts::MAX_FD),
     router(sqlInfo,redisInfo),

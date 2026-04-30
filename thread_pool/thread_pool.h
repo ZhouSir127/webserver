@@ -9,7 +9,7 @@
 class ThreadPool
 {
 public:
-    ThreadPool(TimerManager&timerManager,HttpManager&httpManager,int threadNumber,WorkQueue& workQueue) 
+    ThreadPool(TimerManager&timerManager,HttpManager&httpManager,int threadNumber,WorkQueue<std::pair<int,bool> >& workQueue) 
     :timerManager(timerManager),httpManager(httpManager),threadNumber(threadNumber),workQueue(workQueue){
         if (threadNumber <= 0 ) 
             throw std::invalid_argument("Invalid thread pool parameters");
@@ -35,7 +35,7 @@ private:
 
     size_t threadNumber;        //线程池中的线程数
     std::vector<std::thread> threads;       //描述线程池的数组，其大小为m_thread_number
-    WorkQueue& workQueue;
+    WorkQueue<std::pair<int,bool> >& workQueue;
 };
 
 #endif

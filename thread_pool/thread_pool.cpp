@@ -5,7 +5,7 @@ void ThreadPool::run()
 {
     while (true)
     {
-        std::pair<size_t,bool> work;
+        std::pair<int,bool> work;
         if ( !workQueue.getWork(work) )
             return; // 工作队列已停止且没有任务，退出线程
 

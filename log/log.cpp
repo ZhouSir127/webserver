@@ -1,54 +1,48 @@
 #include "log.h"
 # include <stdarg.h>
+#include <climits>
 
+namespace myLog{
 
-std::vector<std::string> myLog::levelVec{"[debug]: ","[warn]: ","[erro]: ","[info]: "};
-FILE* myLog::fp = nullptr;
-std::mutex myLog::lock;
-std::condition_variable myLog::cv;
-bool myLog::closeLog;
-std::queue<std::string> myLog::logQueue;
-bool myLog::isRunning;
-std::thread myLog::bgThread;
+std::vector<std::string> levelVec{"[debug]: ","[info]: ","[warn]: ","[erro]: "};
+FILE* fp = nullptr;
+bool closeLog;
+std::thread bgThread;
+WorkQueue<std::string> workQueue(INT_MAX);
 
-void myLog::init(const LogInfo&logInfo) {    
+void init(const LogInfo&logInfo) {    
     
     if ( (closeLog = logInfo.close) )
         return; // 如果配置了关闭日志，直接返回，不打开文件
     
     fp = fopen(logInfo.file.c_str(), "a");
-    isRunning = true;
     bgThread = std::thread(asyncWriter);
 }
 
-void myLog::close() {
-    isRunning = false;
+void close() {
+    workQueue.stopWork();
+
+    if (bgThread.joinable() )
+        bgThread.join(); // 阻塞主线程，直到后台线程把队列里最后一点日志写完
+
     if (fp != nullptr) {
         fclose(fp);
         fp = nullptr;
     }
 }
 
-void myLog::asyncWriter() {
+void asyncWriter() {
     while (true) {
         std::string logLine;
-        {
-            std::unique_lock<std::mutex> Lock(lock);
-            // 阻塞休眠，直到队列有数据，或者收到下班通知
-            cv.wait(lock, []() { return logQueue.empty()==false || isRunning==false; });
-
-            if (isRunning==false || logQueue.empty()) {
-                return; // 彻底写完，光荣下班
-
-            // 零拷贝转移数据
-            logLine = std::move(logQueue.front());
-            logQueue.pop();
-        }
-
+        workQueue.getWork(logLine);
+        
+        
         // 在无锁状态下写磁盘，绝不卡顿前端业务
         if (fp) {
             fputs(logLine.c_str(), fp);
             fflush(fp);
         }
     }
+}
+
 }

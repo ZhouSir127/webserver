@@ -12,18 +12,18 @@
 #include <ctime>    // 本地时间转换
 #include <condition_variable>
 #include <thread> 
+#include <sstream>
+#include <iomanip>
+#include "../work_queue/work_queue.h"
 
 namespace myLog{
 
     extern std::vector<std::string>levelVec;
     extern FILE* fp;
-    extern std::mutex lock;
-    extern std::condition_variable cv;
     extern bool closeLog;
-    extern std::queue<std::string> logQueue;
-    extern bool isRunning;
     extern std::thread bgThread;
-    
+    extern WorkQueue<std::string> workQueue;
+
     void init(const LogInfo&logInfo);
     
     template<typename... Args>
@@ -49,16 +49,13 @@ namespace myLog{
         
         (oss << ... << std::forward<Args>(args));    
         oss << "\n";
-
-        std::unique_lock<std::mutex>Lock(lock);
-        logQueue.push(oss.str());
-        cv.notify_one();
+        
+        workQueue.append(oss.str() );
     }
 
     void close();
-    void asyncWriter();
-    
-};
+    void asyncWriter();    
+}
 
 #define LOG_DEBUG(...)  myLog::write(0, ##__VA_ARGS__)
 #define LOG_INFO(...)   myLog::write(1, ##__VA_ARGS__)

@@ -5,10 +5,6 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
     : user(sqlInfo,redisInfo), mavsdkPtr(nullptr), drone(nullptr), action(nullptr),
       telemetry(nullptr),
       getRoutes{
-          {"/",
-           [](HttpConn *conn) -> void {
-             conn->realFilePath = conn->root + "/log.html";
-           }},
           {"/register",
            [](HttpConn *conn) -> void {
              conn->realFilePath = conn->root + "/register.html";
@@ -244,9 +240,9 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
 
 void Router::route(HttpConn *conn){
 
-  if(conn->url == "/register" || conn->url == "/login" || conn->url == "/"){
+  if(conn->url == "/register" || conn->url == "/login"){
     if (conn->method == HttpMethod::GET) {
-      std::unordered_map<std::string, HttpHandler>::const_iterator it = getRoutes.find(conn->url);
+      std::unordered_map<std::string, HttpHandler>::const_iterator it =  getRoutes.find(conn->url);
       if (it != getRoutes.end())
         it->second(conn);
     } else if (conn->method == HttpMethod::POST) {
@@ -272,19 +268,27 @@ void Router::route(HttpConn *conn){
         invalid = true;
   }  
   if(invalid || user.verify(token) == false ){
-    auto it = getRoutes.find("/");
+    auto it = getRoutes.find("/login");
     if (it != getRoutes.end())
       it->second(conn);
     return;
   }
   
-  if (conn->method == HttpMethod::GET) {
-    auto it = getRoutes.find(conn->url);
-    if (it != getRoutes.end())
+  if(conn->url == "/"){
+    auto it = getRoutes.find("/index");
+    if (it != getRoutes.end() )
       it->second(conn);
-  } else if (conn->method == HttpMethod::POST) {
-    auto it = postRoutes.find(conn->url);
-    if (it != postRoutes.end())
-      it->second(conn);
+    return;
+  }else{
+    if (conn->method == HttpMethod::GET) {
+      auto it = getRoutes.find(conn->url);
+      if (it != getRoutes.end())
+        it->second(conn);
+    } else if (conn->method == HttpMethod::POST) {
+      auto it = postRoutes.find(conn->url);
+      if (it != postRoutes.end())
+        it->second(conn);
+    }
   }
+
 }

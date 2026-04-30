@@ -35,7 +35,7 @@ private:
     void remove(int fd);
     Death death;
     TimerManager timerManager;
-    WorkQueue workQueue;
+    WorkQueue<std::pair<int,bool> > workQueue;
     HttpManager httpManager;
     ThreadPool threadPool;
     Listen listen;
