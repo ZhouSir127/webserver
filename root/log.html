@@ -147,6 +147,7 @@
             // 发送 POST 请求到 router.h 中定义的 /login 路由
             fetch('/login', {
                 method: 'POST',
+                credentials: 'include',
                 body: payload
             })
             .then(res => {

@@ -5,9 +5,17 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
     : user(sqlInfo,redisInfo), mavsdkPtr(nullptr), drone(nullptr), action(nullptr),
       telemetry(nullptr),
       getRoutes{
+          {"/login",
+           [](HttpConn *conn) -> void {
+             conn->realFilePath = conn->root + "/log.html";
+           }},
           {"/register",
            [](HttpConn *conn) -> void {
              conn->realFilePath = conn->root + "/register.html";
+           }},
+           {"/index",
+            [](HttpConn *conn) -> void {
+             conn->realFilePath = conn->root + "/index.html";
            }},
           {"/connect",
            [&](HttpConn *) -> void {
@@ -290,5 +298,4 @@ void Router::route(HttpConn *conn){
         it->second(conn);
     }
   }
-
 }

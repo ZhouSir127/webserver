@@ -4,6 +4,7 @@
 #include <string>
 #include "../consts.h"
 #include <filesystem>  
+#include <strings.h>
 
 std::unordered_map<int,std::string> HttpConn::form {
     {400,"Your request has bad syntax or is inherently impossible to staisfy.\n"}, 
@@ -125,9 +126,9 @@ HttpCode HttpConn::parseRequestLine()
     if(!(iss >> token) )
         return HttpCode::BAD_REQUEST;
 
-    if ( token.compare("GET") == 0 )
+    if ( strcasecmp(token.c_str(),"GET") == 0 )
         method = HttpMethod::GET;
-    else if (  token.compare("POST") == 0 )
+    else if (  strcasecmp(token.c_str(),"POST") == 0 )
         method = HttpMethod::POST;
     else
         return HttpCode::BAD_REQUEST;
@@ -137,12 +138,12 @@ HttpCode HttpConn::parseRequestLine()
     
     size_t pos(0);
 
-    if ( token.compare(0 , 7 ,"http://") == 0){
+    if ( strncasecmp(token.c_str(),"http://",7) == 0){
         pos = token.find_first_of('/',7);
     
         if (pos == std::string::npos )
             return HttpCode::BAD_REQUEST;
-    }else if (token.compare(0, 8 ,"https://") == 0){
+    }else if (strncasecmp(token.c_str(),"https://",8) == 0){
         pos = token.find_first_of('/',8);
     
         if ( pos == std::string::npos )
@@ -150,12 +151,12 @@ HttpCode HttpConn::parseRequestLine()
     }else if(token[0] != '/')
         return HttpCode::BAD_REQUEST;
 
-    url = token;
+    url = token.substr(pos);
 
     if(!(iss >> token) )
         return HttpCode::BAD_REQUEST;
 
-    if (token != "HTTP/1.1" && token != "HTTP/1.0")
+    if (strcasecmp(token.c_str(),"HTTP/1.1") && strcasecmp(token.c_str(),"HTTP/1.0") )
         return HttpCode::BAD_REQUEST;    
 
     checkState = CheckState::CHECK_STATE_HEADER;
@@ -169,18 +170,18 @@ HttpCode HttpConn::parseHeaders()
     {
         checkState = CheckState::CHECK_STATE_CONTENT;       
         return HttpCode::GET_REQUEST;
-    }else if (line.compare(0, 11, "Connection:") == 0){
+    }else if (strncasecmp(line.c_str(), "Connection:",11) == 0){
         size_t pos = line.find_first_not_of ( " \t" , 11 );
         if(pos == std::string::npos)
             return HttpCode::BAD_REQUEST;
-        if ( line.compare(pos, 10, "keep-alive") == 0)
+        if ( strncasecmp( line.c_str(),"keep-alive",10) == 0)
             isLinger = true;
-    }else if (line.compare(0, 15, "Content-Length:") == 0){
+    }else if (strncasecmp(line.c_str(), "Content-Length:",15) == 0){
         size_t pos = line.find_first_not_of ( " \t" , 15 );
         if(pos == std::string::npos)
             return HttpCode::BAD_REQUEST;
         contentLength = std::stoul(std::string(line.begin()+pos , line.end() ) );
-    }else if(line.compare(0, 15, "Cookie:") == 0){
+    }else if(strncasecmp(line.c_str(),  "Cookie:",7) == 0){
         size_t pos = line.find_first_not_of ( " \t" , 15 );
         if(pos == std::string::npos)
             return HttpCode::BAD_REQUEST;
@@ -312,10 +313,11 @@ bool HttpConn::processWrite(HttpCode ret)
     if( ret == HttpCode::FILE_REQUEST){
         if (
         (addResponse("HTTP/1.1 ", 200 ,' ',title[200], "\r\n" )&&    
+        addResponse("Cache-Control: no-store, no-cache, must-revalidate\r\n") &&
         addResponse("Content-Length: ",fileSize = ioVectors[1].iov_len = bytesToSend = std::filesystem::file_size(realFilePath), "\r\n" ) && 
         addResponse("Content-Type: ", "text/html" , "\r\n") && 
         addResponse("Connection: " , isLinger ? "keep-alive" : "close" ,"\r\n") &&
-        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
+        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; Max-Age=3600; HttpOnly\r\n"):true ) &&
         addResponse("\r\n") 
         ) == false
         )return false;
@@ -331,7 +333,7 @@ bool HttpConn::processWrite(HttpCode ret)
         addResponse("Content-Length: ", form[400].size(), "\r\n" ) && 
         addResponse("Content-Type: ", "text/plain" , "\r\n") && 
         addResponse("Connection: " , isLinger ? "keep-alive" : "close" ,"\r\n") &&
-        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
+        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; Max-Age=3600; HttpOnly\r\n"):true ) &&
         addResponse("\r\n") &&
         addResponse(form[400]) 
         )==false
@@ -342,7 +344,7 @@ bool HttpConn::processWrite(HttpCode ret)
         addResponse("Content-Length: ", form[403].size(), "\r\n" ) && 
         addResponse("Content-Type: ", "text/plain" , "\r\n") && 
         addResponse("Connection: " , isLinger ? "keep-alive" : "close" ,"\r\n") &&
-        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
+        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; Max-Age=3600; HttpOnly\r\n"):true )&&
         addResponse("\r\n") && 
         addResponse(form[403]) 
         )==false
@@ -353,14 +355,14 @@ bool HttpConn::processWrite(HttpCode ret)
         addResponse("Content-Length: ", form[404].size(), "\r\n" ) && 
         addResponse("Content-Type: ", "text/plain" , "\r\n") && 
         addResponse("Connection: " , isLinger ? "keep-alive" : "close" ,"\r\n") &&
-        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
+        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; Max-Age=3600; HttpOnly\r\n"):true )&&
         addResponse("\r\n") &&
         addResponse(form[404]) 
         )==false
         ) return false;
     }else if(
-        (addResponse("HTTP/1.1 ", 200 ,' ',title[200], "\r\n" ) && 
-        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; HttpOnly\r\n") : true ) &&
+        (addResponse("HTTP/1.1 ", 200 ,' ',title[200], "\r\n" ) && addResponse("Content-Length: 0\r\n")&&
+        ( !token.empty() ? addResponse("Set-Cookie: token=" + token + "; Path=/; Max-Age=3600; HttpOnly\r\n"):true )&&
         addResponse("\r\n") 
         ) == false
         )return false;
