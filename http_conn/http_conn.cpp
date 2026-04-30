@@ -182,7 +182,7 @@ HttpCode HttpConn::parseHeaders()
             return HttpCode::BAD_REQUEST;
         contentLength = std::stoul(std::string(line.begin()+pos , line.end() ) );
     }else if(strncasecmp(line.c_str(),  "Cookie:",7) == 0){
-        size_t pos = line.find_first_not_of ( " \t" , 15 );
+        size_t pos = line.find_first_not_of ( " \t" , 7 );
         if(pos == std::string::npos)
             return HttpCode::BAD_REQUEST;
         cookie = std::string(line.begin()+pos , line.end() );

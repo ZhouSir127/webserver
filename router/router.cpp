@@ -25,8 +25,8 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
                mavsdk::Mavsdk::Configuration config(
                    mavsdk::ComponentType::CompanionComputer);
                mavsdkPtr = std::make_shared<mavsdk::Mavsdk>(config);
-               mavsdkPtr->add_any_connection("udp://:14540");
-               LOG_INFO("正在初始化 MAVSDK 并监听 udp://:14540...", nullptr);
+               mavsdkPtr->add_any_connection("udpin://0.0.0.0:14540");
+               LOG_INFO("正在初始化 MAVSDK 并监听 udpin://0.0.0.0:14540...");
              }
              // 2. 等待并获取无人机系统 (System)
              // 由于网络发现需要一点时间，我们加一个简易的轮询等待 (最多等 1.5
@@ -50,16 +50,16 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
                  action = std::make_shared<mavsdk::Action>(drone);
                  telemetry = std::make_shared<mavsdk::Telemetry>(drone);
                  LOG_INFO(
-                     "成功连接到无人机系统！Action 和 Telemetry 插件已就绪。",
-                     nullptr);
+                     "成功连接到无人机系统！Action 和 Telemetry 插件已就绪。"
+                     );
                } else {
                  drone = nullptr; // 没连上就清空，防止野指针
                  LOG_ERROR("连接超时：未在 udp://:14540 "
-                           "发现无人机系统。请检查仿真器(SITL)是否运行。",
-                           nullptr);
+                           "发现无人机系统。请检查仿真器(SITL)是否运行。"
+                          );
                }
              } else
-               LOG_INFO("无人机系统早已连接，无需重复连接。", nullptr);
+               LOG_INFO("无人机系统早已连接，无需重复连接。");
            }},
           {"/disconnect",
            [&](HttpConn *) -> void {
@@ -68,7 +68,7 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
             action = nullptr;
              telemetry = nullptr;
              drone = nullptr;
-             LOG_INFO("无人机连接已断开", nullptr);
+             LOG_INFO("无人机连接已断开");
            }},
           {"/connstatus",
            [&](HttpConn *) -> void {
@@ -275,6 +275,7 @@ void Router::route(HttpConn *conn){
       }else
         invalid = true;
   }  
+
   if(invalid || user.verify(token) == false ){
     auto it = getRoutes.find("/login");
     if (it != getRoutes.end())
