@@ -20,6 +20,14 @@ private:
 	std::mutex lock;
 	std::queue <std::unique_ptr<sql::Connection> > connQueue; //连接池
 	std::condition_variable cv; //连接池条件变量
+
+	const std::string IP;
+	const uint16_t port;
+	const std::string account;
+	const std::string password;
+	const std::string name;
+	const std::string url;
+	sql::Driver* driver;
 };
 
 class connectionRAII{

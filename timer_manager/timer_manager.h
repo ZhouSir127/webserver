@@ -83,6 +83,8 @@ public:
         addSig(SIGTERM, sigHandler);
 
         setAlarm();
+
+        LOG_INFO("TimerManager and SignalHandler initialized, timeslot: ", slot, "s");
     }
 
     static void clean() {

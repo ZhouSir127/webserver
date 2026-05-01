@@ -5,8 +5,11 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <cerrno>
+#include <cstring>
 #include "../consts.h"
 #include "../channel/channel.h"
+#include "../log/log.h"
 
 class EpollManager{
 
@@ -18,8 +21,10 @@ private:
 
     //对文件描述符设置非阻塞
     EpollManager():epollFd(epoll_create1(0) ){
-        if (epollFd == -1) 
+        if (epollFd == -1) {
             exit(EXIT_FAILURE);
+            LOG_ERROR("epoll_create1 failed! errno: ", errno, " (", strerror(errno), ")");
+        }
     }
     
     ~EpollManager(){
@@ -36,9 +41,9 @@ public:
         return epollManager;
     }
     //将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
-    int add(Channel* channel, uint32_t events);
-    int remove(Channel*channel);
-    int modify(Channel*channel, uint32_t events);
+    bool add(Channel* channel, uint32_t events);
+    bool remove(Channel*channel);
+    bool modify(Channel*channel, uint32_t events);
     int wait(int timeoutMs = -1);
 };
 

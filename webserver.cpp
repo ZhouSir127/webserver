@@ -3,24 +3,25 @@
 #include "work_queue/work_queue.h"
 
 WebServer::WebServer(
-                const ListenInfo& listenInfo,  
                 const TimerInfo& timerInfo,
-                const HttpInfo& httpInfo,
-                const SqlInfo& sqlInfo,const RedisInfo& redisInfo,
+                const HttpInfo& httpInfo,const SqlInfo& sqlInfo,const RedisInfo& redisInfo,
                 const ThreadPoolInfo& threadPoolInfo,
+                const ListenInfo& listenInfo,  
                 const LogInfo& logInfo  
             )
 :timerManager(timerInfo, death),
-workQueue(threadPoolInfo.maxRequest),
+workQueue(threadPoolInfo.maxRequest,false),
 httpManager(httpInfo,sqlInfo,redisInfo,workQueue,death),
 threadPool(timerManager,httpManager,threadPoolInfo.threadNumer,workQueue),
-listen(listenInfo, timerManager, httpManager)
+listen(listenInfo,timerManager,httpManager)
 {
     myLog::init(logInfo);
+    LOG_INFO("========== WebServer initialized and starting ==========");
 }
 
 WebServer::~WebServer()
 {
+    LOG_INFO("========== WebServer is shutting down ==========");
     myLog::close();
 }
 
@@ -30,18 +31,18 @@ void WebServer::eventLoop()
         int number = EpollManager::getInstance().wait();
         if (number < 0 ){
             if(errno != EINTR){
-                LOG_ERROR("%s", "epoll failure");
+                LOG_ERROR("epoll wait failure! errno: ", errno, " (", strerror(errno), ")");
                 break;
             }    
         }
         if (timerManager.getTimeout() ){
             timerManager.timerHandler();
-            LOG_INFO("%s", "timer tick");
+            LOG_DEBUG("timer tick handled");
         }
         for(int fd : death.getDeath() ){
             timerManager.remove(fd);
             httpManager.remove(fd);
-            LOG_INFO("close fd %d", fd);
+            LOG_DEBUG("close fd: ", fd);
         }
             
     }while (timerManager.getStopServer() == false);

@@ -18,11 +18,13 @@ bool Listen::acceptNewConnection()
     {
         int connfd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength);
         if (connfd < 0){
-            LOG_ERROR("%s:errno is:%d", "accept error", errno);
+            LOG_ERROR("accept error: ", errno, " (", strerror(errno), ")");
             return false;
         }
         
-        LOG_INFO("New connection accepted, fd: %d", connfd);
+        LOG_DEBUG("New connection accepted (ET). fd: ", connfd, 
+                      ", client IP: ", inet_ntoa(client_address.sin_addr), 
+                      ", Port: ", ntohs(client_address.sin_port));
 
         if (connfd > consts::MAX_FD)
         {
@@ -31,7 +33,7 @@ bool Listen::acceptNewConnection()
         
             close(connfd);
 
-            LOG_ERROR("%s", "Internal server busy");
+            LOG_ERROR("Internal server busy. MAX_FD reached. Dropping fd: ", connfd);
             return false;
         }        
         timerManager.add(connfd);
@@ -41,16 +43,26 @@ bool Listen::acceptNewConnection()
         while (1)
         {
             int fd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength);
-            if (fd < 0)
-                break;
+            if (fd < 0){
+                if(errno == EAGAIN)
+                    break;
+                LOG_ERROR("ET mode accept error: ", errno, " (", strerror(errno), ")");
+                return false;
+            }
+            
+            LOG_DEBUG("New connection accepted (ET). fd: ", fd, 
+                      ", client IP: ", inet_ntoa(client_address.sin_addr), 
+                      ", Port: ", ntohs(client_address.sin_port));
+            
             if ( fd > consts::MAX_FD)
             {
-                const char *info = "Internal server busy";
-                send(fd, info, strlen(info), 0);
+                std::string info = "Internal server busy";
+                send(fd, info.c_str(), info.size(), 0);
                 
                 close(fd);
 
-                LOG_ERROR("%s", "Internal server busy");
+                LOG_ERROR("Internal server busy (ET). MAX_FD reached. Dropping fd: ", fd);
+
                 return false;
             }
             timerManager.add(fd);

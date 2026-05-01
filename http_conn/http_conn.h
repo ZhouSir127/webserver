@@ -94,8 +94,6 @@ private:
 
         writeBuffer.append(result);
 
-        LOG_INFO("request:%s", writeBuffer.c_str());
-
         return true;
     }
 

@@ -38,11 +38,13 @@ struct ThreadPoolInfo{
 struct LogInfo{
     const std::string&file;
     bool close;
+    size_t maxRequest;
 };
 
 struct ListenInfo{
     uint16_t port;
     bool isListenEt;
+    size_t backlog;
 };
 
 #endif

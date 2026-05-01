@@ -131,9 +131,10 @@ void SignalHandler::sigHandler(int sig)
     //为保证函数的可重入性，保留原来的errno
     int save_errno = errno;
     
-    if(write(pipefd[1], reinterpret_cast<char*>(&sig), 1) < 0)
-        LOG_ERROR("Failed to write signal to pipe: %s", strerror(errno));
-    
+    int ret = write(pipefd[1], reinterpret_cast<char*>(&sig), 1);
+    if(ret < 0)
+        return;
+
     errno = save_errno;
 }
 

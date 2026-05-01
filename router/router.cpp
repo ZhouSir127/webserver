@@ -19,56 +19,56 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
            }},
           {"/connect",
            [&](HttpConn *) -> void {
-            std::unique_lock<std::mutex>Lock(lock); 
-            
-            if (!mavsdkPtr) {
-               mavsdk::Mavsdk::Configuration config(
-                   mavsdk::ComponentType::CompanionComputer);
-               mavsdkPtr = std::make_shared<mavsdk::Mavsdk>(config);
-               mavsdkPtr->add_any_connection("udpin://0.0.0.0:14540");
-               LOG_INFO("正在初始化 MAVSDK 并监听 udpin://0.0.0.0:14540...");
+             {
+               std::unique_lock<std::mutex> Lock(lock);
+               if (!mavsdkPtr) {
+                 mavsdk::Mavsdk::Configuration config(mavsdk::ComponentType::CompanionComputer);
+                 mavsdkPtr = std::make_shared<mavsdk::Mavsdk>(config);
+                 mavsdkPtr->add_any_connection("udpin://0.0.0.0:14540");
+                 LOG_INFO("正在初始化 MAVSDK 并监听 udpin://0.0.0.0:14540...");
+               }
              }
-             // 2. 等待并获取无人机系统 (System)
-             // 由于网络发现需要一点时间，我们加一个简易的轮询等待 (最多等 1.5
-             // 秒)
-             if (!drone) {
-               bool found = false;
-               for (int i = 0; i < 15; ++i) {
-                 if (!mavsdkPtr->systems().empty()) {
-                   drone =
-                       mavsdkPtr->systems().at(0); // 获取发现的第一个无人机系统
-                   if (drone->is_connected()) {
-                     found = true;
-                     break;
-                   }
+
+             bool found = false;
+             for (int i = 0; i < 15; ++i) {
+               std::shared_ptr<mavsdk::System> tempDrone;
+               {
+                 std::unique_lock<std::mutex> Lock(lock);
+                 if (mavsdkPtr && !mavsdkPtr->systems().empty()) {
+                   tempDrone = mavsdkPtr->systems().at(0);
                  }
-                 usleep(100000); // 睡 100 毫秒再查
                }
 
-               // 3. 实例化动作和遥测插件！(最关键的一步)
-               if (found && drone) {
+               if (tempDrone && tempDrone->is_connected()) {
+                 std::unique_lock<std::mutex> Lock(lock);
+                 drone = tempDrone;
                  action = std::make_shared<mavsdk::Action>(drone);
                  telemetry = std::make_shared<mavsdk::Telemetry>(drone);
-                 LOG_INFO(
-                     "成功连接到无人机系统！Action 和 Telemetry 插件已就绪。"
-                     );
-               } else {
-                 drone = nullptr; // 没连上就清空，防止野指针
-                 LOG_ERROR("连接超时：未在 udp://:14540 "
-                           "发现无人机系统。请检查仿真器(SITL)是否运行。"
-                          );
+                 LOG_INFO("成功连接到无人机系统！Action 和 Telemetry 插件已就绪。");
+                 found = true;
+                 break;
                }
-             } else
-               LOG_INFO("无人机系统早已连接，无需重复连接。");
+               usleep(100000);
+             }
+
+             if (!found) {
+               std::unique_lock<std::mutex> Lock(lock);
+               drone = nullptr;
+               LOG_ERROR("连接超时：未在 udp://:14540 发现无人机系统。");
+             }
            }},
           {"/disconnect",
            [&](HttpConn *) -> void {
-            std::unique_lock<std::mutex>Lock(lock); 
-             mavsdkPtr = nullptr; 
-            action = nullptr;
+             std::unique_lock<std::mutex>Lock(lock);
+
+             action = nullptr;
              telemetry = nullptr;
+
              drone = nullptr;
-             LOG_INFO("无人机连接已断开");
+
+             mavsdkPtr = nullptr;
+
+             LOG_INFO("无人机连接已断开且资源释放完毕");
            }},
           {"/connstatus",
            [&](HttpConn *) -> void {
@@ -79,7 +79,7 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
              }
              if (tmpDrone) {
                bool is_conn = tmpDrone->is_connected();
-               LOG_INFO("连接状态: %d", is_conn);
+               LOG_INFO("连接状态: ", is_conn);
              }
            }},
           {"/arm",
@@ -89,8 +89,16 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
                std::unique_lock<std::mutex> Lock(lock);
                tmpAction = this->action;
              }
-             if (tmpAction)
-               tmpAction->arm();
+             if (tmpAction) {
+                 mavsdk::Action::Result res = tmpAction->arm();
+                 if (res != mavsdk::Action::Result::Success) {
+                     LOG_WARN("无人机解锁(Arm)失败！原因代码: ", static_cast<int>(res));
+                 } else {
+                     LOG_INFO("无人机已成功解锁");
+                 }
+             } else {
+                 LOG_WARN("尝试解锁失败：无人机未连接");
+             }
            }},
           {"/disarm",
            [&](HttpConn *) -> void {
@@ -119,8 +127,18 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
                std::unique_lock<std::mutex> Lock(lock);
                tmpAction = this->action;
              }
-             if (tmpAction)
-               tmpAction->takeoff();
+
+             if (tmpAction) {
+                 mavsdk::Action::Result res = tmpAction->takeoff();
+
+                 if (res != mavsdk::Action::Result::Success) {
+                     LOG_WARN("无人机起飞失败！原因代码: ", static_cast<int>(res));
+                 } else {
+                     LOG_INFO("无人机起飞命令发送成功");
+                 }
+             } else {
+                 LOG_WARN("尝试起飞失败：无人机尚未连接或 Action 插件未就绪。");
+             }
            }},
           {"/land",
            [&](HttpConn *) -> void {
@@ -150,8 +168,29 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
                tmpTelemetry = this->telemetry;
              }
 
-             if (tmpTelemetry)
-               tmpTelemetry->position();
+             if (tmpTelemetry) {
+                 mavsdk::Telemetry::Position pos = tmpTelemetry->position();
+
+                 LOG_INFO("获取位置成功 - 纬度: ", pos.latitude_deg,
+                          ", 经度: ", pos.longitude_deg,
+                          ", 绝对高度: ", pos.absolute_altitude_m, "m");
+
+             } else {
+                 LOG_WARN("获取位置失败：无人机未连接");
+             }
+           }},
+          {"/battery",
+           [&](HttpConn *) -> void {
+             std::shared_ptr<mavsdk::Telemetry> tmpTelemetry;
+             {
+               std::unique_lock<std::mutex> Lock(lock);
+               tmpTelemetry = this->telemetry;
+             }
+             if (tmpTelemetry) {
+                 mavsdk::Telemetry::Battery bat = tmpTelemetry->battery();
+                 LOG_INFO("电池状态 - 剩余电量: ", bat.remaining_percent * 100,
+                          "%, 电压: ", bat.voltage_v, "V");
+             }
            }},
           {"/velocity",
            [&](HttpConn *) -> void {
@@ -172,16 +211,6 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
              }
              if (tmpTelemetry)
                tmpTelemetry->attitude_euler();
-           }},
-          {"/battery",
-           [&](HttpConn *) -> void {
-             std::shared_ptr<mavsdk::Telemetry> tmpTelemetry;
-             {
-               std::unique_lock<std::mutex> Lock(lock);
-               tmpTelemetry = this->telemetry;
-             }
-             if (tmpTelemetry)
-               tmpTelemetry->battery();
            }},
           {"/gps",
            [&](HttpConn *) -> void {
@@ -212,16 +241,15 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
 
              if (!(iss >> name) || !(iss >> password)){
                 conn->realFilePath = conn->root + "/registerError.html";
-                LOG_ERROR("Payload 解析失败，内容: %s", conn->requestBody.c_str());
+                LOG_ERROR("Payload 解析失败，内容: ", conn->requestBody);
                 return;
-             } 
+             }
              if (user.add(name, password) ){
                  conn->realFilePath = conn->root + "/log.html";
-                 LOG_INFO("User Register Success: %s", name.c_str());
+                 LOG_INFO("User Register Success: ", name);
              } else {
                conn->realFilePath = conn->root + "/registerError.html";
-               LOG_ERROR("User Register Failed (User Exists): %s",
-                         name.c_str());
+               LOG_ERROR("User Register Failed (User Exists): ",name);
              }
            }},
           {"/login", [&](HttpConn *conn) -> void {
@@ -230,19 +258,19 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
 
              if (!(iss >> name) || !(iss >> password)){
                 conn->realFilePath = conn->root + "/logError.html";
-                LOG_ERROR("Payload 解析失败，内容: %s", conn->requestBody.c_str());
+                LOG_ERROR("Payload 解析失败，内容: ",conn->requestBody);
                 return;
-             } 
+             }
 
              conn->token = user.login(name, password);
 
              if (!conn->token.empty()) {
                conn->realFilePath = conn->root + "/index.html";
-               LOG_INFO("User Login Success: %s", name.c_str());
+               LOG_INFO("User Login Success: ", name);
              } else {
                conn->realFilePath = conn->root + "/logError.html";
-               LOG_ERROR("User Login Failed (Wrong password/No user): %s",
-                         name.c_str());
+               LOG_WARN("User Login Failed (Wrong password/No user):",
+                         name);
              }
            }}} {}
 
@@ -265,16 +293,16 @@ void Router::route(HttpConn *conn){
   std::string token;
   if(invalid == false){
       size_t pos = conn->cookie.find("token=");
-      if (pos != std::string::npos){
-        pos += 6; 
+      if (pos != std::string::npos && (pos == 0 || conn->cookie[pos - 1] == ' ' || conn->cookie[pos - 1] == ';') ){
+        pos += 6;
         size_t endPos = conn->cookie.find(';',pos);
         if (endPos != std::string::npos)
             token = conn->cookie.substr(pos, endPos - pos);
         else
-            token = conn->cookie.substr(pos);  
+            token = conn->cookie.substr(pos);
       }else
         invalid = true;
-  }  
+  }
 
   if(invalid || user.verify(token) == false ){
     auto it = getRoutes.find("/login");
@@ -282,7 +310,7 @@ void Router::route(HttpConn *conn){
       it->second(conn);
     return;
   }
-  
+
   if(conn->url == "/"){
     auto it = getRoutes.find("/index");
     if (it != getRoutes.end() )

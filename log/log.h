@@ -14,7 +14,6 @@
 #include <thread> 
 #include <sstream>
 #include <iomanip>
-#include "../work_queue/work_queue.h"
 
 namespace myLog{
 
@@ -22,10 +21,10 @@ namespace myLog{
     extern FILE* fp;
     extern bool closeLog;
     extern std::thread bgThread;
-    extern WorkQueue<std::string> workQueue;
 
     void init(const LogInfo&logInfo);
-    
+    void append(const std::string&str);
+
     template<typename... Args>
     void write(int level,Args&&... args){
         if (closeLog || fp == nullptr)
@@ -50,7 +49,7 @@ namespace myLog{
         (oss << ... << std::forward<Args>(args));    
         oss << "\n";
         
-        workQueue.append(oss.str() );
+        append(oss.str() );
     }
 
     void close();

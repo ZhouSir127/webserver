@@ -7,6 +7,7 @@
 namespace sysListen{
     const uint16_t PORT = 8080; 
     const bool LISTENET = false;
+    const size_t BACKLOG = 4096;
 }
 
 namespace timer{
@@ -36,6 +37,7 @@ namespace threadPool{
 namespace sysLog{
     const std::string FILE = "/var/log/webserver";
     const bool CLOSE = false;
+    const size_t MAX_REQUEST = 40000;
 }
 
 namespace redis{

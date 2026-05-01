@@ -6,20 +6,23 @@
 #include "../log/log.h"
 
 ConnectionPool::ConnectionPool(const SqlInfo& sqlInfo)
+:	IP(sqlInfo.IP),
+	port(sqlInfo.port),
+	account(sqlInfo.account),
+	password(sqlInfo.password),
+	name(sqlInfo.name),
+	url ("tcp://" + IP + ":" + std::to_string(port) ),
+	driver(get_driver_instance() )
 {
 	try{
-		sql::Driver* driver = get_driver_instance();
-		std::string url = "tcp://" + sqlInfo.IP + ":" + std::to_string(sqlInfo.port);
-
 		for (int i = 0; i < sqlInfo.num; i++){
-			connQueue.emplace(driver->connect(url, sqlInfo.account, sqlInfo.password));
+			connQueue.emplace(driver->connect(url,account, password));
 			connQueue.back()->setSchema(sqlInfo.name);
 		}
 	}catch (sql::SQLException &e){
-		LOG_ERROR("MySQL Error: %s", e.what());
-		exit(1);
+		LOG_ERROR("MySQL Error: ", e.what());
 	}
-	LOG_INFO("MySQL Connection Pool initialized successfully with %d connections", sqlInfo.num);
+	LOG_INFO("MySQL Connection Pool initialized successfully with ", sqlInfo.num, " connections");
 }
 
 //当有请求时，从数据库连接池中返回一个可用连接，更新使用和空闲连接数
@@ -31,7 +34,18 @@ std::unique_ptr<sql::Connection> ConnectionPool::getConnection()
 	std::unique_ptr<sql::Connection> con ( std::move(connQueue.front()) );
 	connQueue.pop();
 
-	return con;
+	if (con && con->isValid())
+        return con;
+	
+	try {
+		con = std::unique_ptr<sql::Connection>(driver->connect(url, account, password));
+		con->setSchema(name);
+		LOG_INFO("MySQL connection recreated successfully.");
+		return con;
+	} catch (sql::SQLException &e){
+		LOG_ERROR("Failed to recreate MySQL connection: ", e.what());
+		return nullptr;
+	}
 }
 
 //释放当前使用的连接
@@ -39,11 +53,6 @@ bool ConnectionPool::releaseConnection( std::unique_ptr<sql::Connection> con)
 {
 	if (!con)
 		return false;
-
-	if (!con->isValid()) { 
-        LOG_ERROR("MySQL connection is dead, discarding it.", nullptr);
-        return false; 
-    }
 
 	std::unique_lock<std::mutex>Lock(lock);
 	connQueue.push(std::move(con) );

@@ -19,11 +19,10 @@ class WebServer
 {
 public:
 WebServer(
-        const ListenInfo& listenInfo,
         const TimerInfo& timerInfo,
-        const HttpInfo& httpInfo,
-        const SqlInfo& sqlInfo,const RedisInfo& redisInfo,
+        const HttpInfo& httpInfo,const SqlInfo& sqlInfo,const RedisInfo& redisInfo,
         const ThreadPoolInfo& threadPoolInfo,
+        const ListenInfo& listenInfo,  
         const LogInfo& logInfo
         );
     

@@ -13,27 +13,50 @@ int EpollManager::setNonBlocking(int fd)
 }
 
 //将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
-int EpollManager::add(Channel*channel, uint32_t events)
+bool EpollManager::add(Channel*channel, uint32_t events)
 {
     epoll_event event;
     event.events = events;
     event.data.ptr = channel;
     setNonBlocking(channel -> getFd() );
-    return epoll_ctl(epollFd, EPOLL_CTL_ADD, channel -> getFd(), &event);    
+    int ret = epoll_ctl(epollFd, EPOLL_CTL_ADD, channel -> getFd(), &event);    
+    if(ret < 0){
+        LOG_ERROR("epoll_ctl ADD failed for fd: ", channel->getFd(), 
+                  ". errno: ", errno, " (", strerror(errno), ")");
+        return false;
+    }
+    return true;
 }
 
-int EpollManager::modify(Channel*channel, uint32_t events)
+bool EpollManager::modify(Channel*channel, uint32_t events)
 {
     epoll_event event;
     event.events = events;
     event.data.ptr = channel;
-    return epoll_ctl(epollFd, EPOLL_CTL_MOD, channel -> getFd(), &event);
+
+    int ret = epoll_ctl(epollFd, EPOLL_CTL_MOD, channel -> getFd(), &event);
+
+    if (ret < 0) {
+        LOG_ERROR("epoll_ctl MOD failed for fd: ", channel->getFd(), 
+                  ". errno: ", errno, " (", strerror(errno), ")");
+        return false;
+    }
+    return true;
 }
 
 //从内核时间表删除描述符
-int EpollManager::remove(Channel*channel)
+bool EpollManager::remove(Channel*channel)
 {
-    return epoll_ctl(epollFd, EPOLL_CTL_DEL, channel -> getFd(), 0);
+    int ret = epoll_ctl(epollFd, EPOLL_CTL_DEL, channel -> getFd(), 0);
+
+    if (ret < 0 && errno != ENOENT) {
+        // ENOENT 表示要删的 fd 本来就不在 epoll 里，这种情况在断开连接时很常见，忽略即可。
+        // 只有发生其他系统错误时才记录 ERROR
+        LOG_ERROR("epoll_ctl DEL failed for fd: ", channel->getFd(), 
+                  ". errno: ", errno, " (", strerror(errno), ")");
+        return false;    
+    }
+    return true;
 }
 
 int EpollManager::wait(int timeoutMs)

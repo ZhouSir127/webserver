@@ -84,8 +84,10 @@ HttpCode HttpConn::readOnce()
     //LT读取数据
     if (!isConnectEt){
         if(readBuffer.size()==readIdx){
-            if(readBuffer.size() == consts::READ_BUFFER_SIZE)
+            if(readBuffer.size() == consts::READ_BUFFER_SIZE){
+                LOG_WARN("Read buffer overflow (LT). Malicious client? fd: ", fd);
                 return HttpCode::BAD_REQUEST;
+            }
             readBuffer.resize( std::min( (readBuffer.size()<<1),consts::READ_BUFFER_SIZE) );
         }
         ssize_t bytes_read = recv(fd, &readBuffer[readIdx] ,readBuffer.size()-readIdx,0);
@@ -101,9 +103,13 @@ HttpCode HttpConn::readOnce()
     }else
         while (true)
         {    
-            if(readBuffer.size()==readIdx)
-                readBuffer.resize(readBuffer.size()<<1 );
-            
+            if(readBuffer.size()==readIdx){
+                if(readBuffer.size() == consts::READ_BUFFER_SIZE){
+                    LOG_WARN("Read buffer overflow (ET). Malicious client? fd: ", fd);
+                    return HttpCode::BAD_REQUEST;
+                }
+                readBuffer.resize(std::min( (readBuffer.size()<<1),consts::READ_BUFFER_SIZE) );
+            }
             ssize_t bytes_read = recv(fd, &readBuffer[readIdx], readBuffer.size()-readIdx , 0);
             if (bytes_read < 0 ){
                 if (errno == EAGAIN || errno == EINTR)
@@ -234,11 +240,11 @@ HttpCode HttpConn::doRequest()
     
     if(!realFilePath.empty() ){
         if (!std::filesystem::exists(realFilePath)  ){
-            LOG_ERROR("File request Error: NO_RESOURCE (404) for path: %s", realFilePath.c_str());
+            LOG_WARN("404 Not Found requested. path: ", realFilePath);
             return HttpCode::NO_RESOURCE;
         }
         if (access(realFilePath.c_str(), R_OK) != 0  ){
-            LOG_ERROR("File request Error: FORBIDDEN_REQUEST (403) for path: %s", realFilePath.c_str());
+            LOG_ERROR("File permission denied (403). WebServer lacks R_OK for path: ", realFilePath);
             return HttpCode::FORBIDDEN_REQUEST;
         }
         if (!std::filesystem::is_regular_file(realFilePath) )
@@ -327,6 +333,12 @@ bool HttpConn::processWrite(HttpCode ret)
         ioVectors[1].iov_base = fileAddress = static_cast<char*>(mmap(0, bytesToSend, PROT_READ, MAP_PRIVATE, fd, 0));
         close(fd);
 
+        if (fileAddress == MAP_FAILED) {
+            LOG_ERROR("mmap failed for file: ", realFilePath, " errno: ", errno);
+            fileAddress = nullptr; // 避免析构时误用
+            return false; // 触发关闭连接或转入 500 处理流程
+        }
+    
     }else if(ret == HttpCode::BAD_REQUEST){
         if ( 
         (addResponse("HTTP/1.1 ", 400 ,' ',title[400], "\r\n" ) && 
@@ -375,16 +387,19 @@ bool HttpConn::processWrite(HttpCode ret)
 
 HttpCode HttpConn::process(){
     
-    HttpCode read_ret = processRead();
-    if (read_ret == HttpCode::NO_REQUEST || read_ret == HttpCode::CLOSED_CONNECTION )
-        return read_ret;
+    HttpCode ret = processRead();
+    if (ret == HttpCode::NO_REQUEST || ret == HttpCode::CLOSED_CONNECTION )
+        return ret;
+
+    //FORBIDDEN_REQUEST || NO_RESOURCE
     
-    if( !(read_ret == HttpCode::GET_REQUEST || read_ret == HttpCode::FILE_REQUEST ) )
+    if( ret == HttpCode::BAD_REQUEST ){
         isLinger = false;
-    //GET_REQUEST || BAD_REQUEST || NO_RESOURCE || FORBIDDEN_REQUEST || FILE_REQUEST || INTERNAL_ERROR
-    if ( !processWrite(read_ret) )
+        LOG_WARN("Bad HTTP request syntax from fd: ", fd);
+    }
+    if ( !processWrite(ret) )
         return HttpCode::CLOSED_CONNECTION;
 
-    return read_ret;
+    return ret;
 }
 
