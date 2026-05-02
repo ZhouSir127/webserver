@@ -22,8 +22,8 @@ private:
     //对文件描述符设置非阻塞
     EpollManager():epollFd(epoll_create1(0) ){
         if (epollFd == -1) {
-            exit(EXIT_FAILURE);
             LOG_ERROR("epoll_create1 failed! errno: ", errno, " (", strerror(errno), ")");
+            exit(EXIT_FAILURE);
         }
     }
     

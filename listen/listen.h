@@ -27,7 +27,7 @@ private:
     TimerManager& timerManager;
     HttpManager& httpManager;
     
-    bool acceptNewConnection();
+    void acceptNewConnection();
 
 public:
     Listen(const ListenInfo& listenInfo, TimerManager& timerManager, HttpManager& httpManager)

@@ -10,7 +10,7 @@
 #include "../log/log.h"
 #include "../consts.h"
 
-bool Listen::acceptNewConnection()
+void Listen::acceptNewConnection()
 {
     struct sockaddr_in client_address;
     socklen_t client_addrlength = sizeof(client_address);
@@ -18,55 +18,61 @@ bool Listen::acceptNewConnection()
     {
         int connfd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength);
         if (connfd < 0){
+            if(errno == EAGAIN || errno == EINTR)
+                return;
             LOG_ERROR("accept error: ", errno, " (", strerror(errno), ")");
-            return false;
+            return;
         }
-        
-        LOG_DEBUG("New connection accepted (ET). fd: ", connfd, 
-                      ", client IP: ", inet_ntoa(client_address.sin_addr), 
-                      ", Port: ", ntohs(client_address.sin_port));
+        char clientIp[16];
+        inet_ntop(AF_INET, &client_address.sin_addr, clientIp, sizeof(clientIp));
+
+        LOG_DEBUG("New connection accepted fd: ", connfd, 
+                ", client IP: ", clientIp, 
+                ", Port: ", ntohs(client_address.sin_port));
 
         if (connfd > consts::MAX_FD)
         {
-            const char *info = "Internal server busy";
-            send(connfd, info, strlen(info), 0);
-        
+            const std::string info = "Internal server busy";
+            send(connfd, info.c_str(), info.length(), 0);
             close(connfd);
-
-            LOG_ERROR("Internal server busy. MAX_FD reached. Dropping fd: ", connfd);
-            return false;
-        }        
-        timerManager.add(connfd);
-        httpManager.add(connfd);
-    }
-    else
+            LOG_WARN("Internal server busy. MAX_FD reached. Dropping fd: ", connfd);
+            while(accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength)>0 );
+        }else{
+            timerManager.add(connfd);
+            httpManager.add(connfd);
+        }
+    }else
         while (1)
         {
             int fd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength);
             if (fd < 0){
                 if(errno == EAGAIN)
                     break;
+                else if(errno == EINTR)
+                    continue;
+
                 LOG_ERROR("ET mode accept error: ", errno, " (", strerror(errno), ")");
-                return false;
+                break;
             }
             
+            char clientIp[16];
+            inet_ntop(AF_INET, &client_address.sin_addr, clientIp, sizeof(clientIp));
+
             LOG_DEBUG("New connection accepted (ET). fd: ", fd, 
-                      ", client IP: ", inet_ntoa(client_address.sin_addr), 
-                      ", Port: ", ntohs(client_address.sin_port));
-            
+                    ", client IP: ", clientIp, 
+                    ", Port: ", ntohs(client_address.sin_port));
+                
             if ( fd > consts::MAX_FD)
             {
-                std::string info = "Internal server busy";
+                const std::string info = "Internal server busy";
                 send(fd, info.c_str(), info.size(), 0);
-                
                 close(fd);
-
-                LOG_ERROR("Internal server busy (ET). MAX_FD reached. Dropping fd: ", fd);
-
-                return false;
+                LOG_WARN("Internal server busy (ET). MAX_FD reached. Dropping fd: ", fd);
+                while(accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength)>0 );
+                break;
+            }else{
+                timerManager.add(fd);
+                httpManager.add(fd);
             }
-            timerManager.add(fd);
-            httpManager.add(fd);
         }
-    return true;
 }
