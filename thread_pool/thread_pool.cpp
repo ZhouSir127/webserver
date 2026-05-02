@@ -16,8 +16,7 @@ void ThreadPool::run()
         if ( !work.second )
             switch(conn->process() ){//读处理后，无需响应直接关闭
                 case HttpCode::CLOSED_CONNECTION:
-                    timerManager.remove(work.first);
-                    httpManager.remove(work.first);
+                    death.add(work.first);
                     break;
                 case HttpCode::NO_REQUEST://继续读
                     EpollManager::getInstance().modify(conn->getChannel(), EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (httpManager.getConnectEt() ? EPOLLET : static_cast<uint32_t>(0)) );
@@ -44,10 +43,8 @@ void ThreadPool::run()
                 EpollManager::getInstance() .modify(conn->getChannel(), EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (httpManager.getConnectEt() ? EPOLLET : static_cast<uint32_t>(0)) );
                 timerManager.adjust(work.first);
                 conn->init();
-            }else{
-                timerManager.remove(work.first);
-                httpManager.remove(work.first);
-            }
+            }else
+                death.add(work.first);
         }
     }
 }

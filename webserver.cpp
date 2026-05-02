@@ -12,7 +12,7 @@ WebServer::WebServer(
 :timerManager(timerInfo, death),
 workQueue(threadPoolInfo.maxRequest,false),
 httpManager(httpInfo,sqlInfo,redisInfo,workQueue,death),
-threadPool(timerManager,httpManager,threadPoolInfo.threadNumer,workQueue),
+threadPool(timerManager,httpManager,threadPoolInfo.threadNumer,workQueue,death),
 listen(listenInfo,timerManager,httpManager)
 {
     myLog::init(logInfo);
@@ -24,6 +24,7 @@ WebServer::~WebServer()
     LOG_INFO("========== WebServer is shutting down ==========");
     myLog::close();
 }
+
 
 void WebServer::eventLoop()
 {

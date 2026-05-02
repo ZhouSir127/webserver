@@ -29,14 +29,14 @@ WebServer(
     ~WebServer();
 
     void eventLoop();
-    
-private:
-    void remove(int fd);
+
+private:    
     Death death;
     TimerManager timerManager;
     WorkQueue<std::pair<int,bool> > workQueue;
     HttpManager httpManager;
     ThreadPool threadPool;
     Listen listen;
+
 };
 #endif

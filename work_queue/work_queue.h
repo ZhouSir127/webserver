@@ -38,7 +38,7 @@ public:
             return false;
         }
         workQueue.push(item);
-            
+
         cv.notify_one();
 
         return true;
@@ -54,6 +54,7 @@ public:
         workQueue.pop();
         return true;
     }//后台线程和子线程来调用
+    
     void stopWork() {
         if(isLogQueue == false)
             LOG_INFO("Work queue stopped. Remaining tasks: ", workQueue.size(), ". Waking up all waiting threads.");

@@ -41,7 +41,8 @@ void close() {
 void asyncWriter() {
     while (true) {
         std::string logLine;
-        workQueue.getWork(logLine);
+        if( workQueue.getWork(logLine) ==false )
+            return;
         
         // 在无锁状态下写磁盘，绝不卡顿前端业务
         if (fp) {

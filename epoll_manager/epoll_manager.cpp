@@ -62,9 +62,7 @@ bool EpollManager::remove(Channel*channel)
 int EpollManager::wait(int timeoutMs)
 {
     int num = epoll_wait(epollFd, events, consts::MAX_EVENT_NUMBER, timeoutMs);
-    if (num < 0) 
-        return -1;
-
+    
     for(int i = 0; i < num; ++i){
         Channel* channel = static_cast<Channel*>(events[i].data.ptr);
         channel -> handleEvent(events[i].events);
