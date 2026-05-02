@@ -12,6 +12,11 @@ bool User::add(const std::string& name,const std::string& password ) {
         connectionRAII mysqlcon(&connPool);
         sql::Connection* con = mysqlcon.getConnection();
 
+        if (!con) {
+            LOG_ERROR("Failed to get database connection from pool.");
+            return false;
+        }
+
         std::unique_ptr<sql::PreparedStatement> queryPstmt(con->prepareStatement("SELECT username FROM user WHERE username = ?") );
         queryPstmt -> setString(1,name);
         std::unique_ptr<sql::ResultSet> res(queryPstmt -> executeQuery());
@@ -27,17 +32,13 @@ bool User::add(const std::string& name,const std::string& password ) {
         Insertpstmt -> setString(2,salt + "$" +hashedPassword);
         return Insertpstmt -> executeUpdate() > 0;
     }catch(sql::SQLException &e){
-        LOG_ERROR("SQL error: %s", e.what());
+        LOG_ERROR("SQL error: ", e.what());
         return false;
     }
 }
 
 std::string User::generateUUID() {
-    // 🔥 修复 1：使用 thread_local 代替 static
-    // 这意味着线程池中的每个线程，都会拥有自己独立的一份随机数生成器。
-    // 彻底消除了锁竞争和数据竞争，性能拉满！
 
-    // 🔥 修复 2：使用 std::random_device 获取操作系统底层的真随机种子 (用于 Token 防预测)
     thread_local std::random_device rd;
     thread_local std::mt19937 gen(rd());
     thread_local std::uniform_int_distribution<uint16_t> dis(0, 255);
@@ -46,8 +47,6 @@ std::string User::generateUUID() {
     for (int i = 0; i < 16; ++i)
         uuid[i] = static_cast<uint8_t>(dis(gen));
 
-
-    // ============= 固定 UUID v4 格式规则 =============
     uuid[6] = (uuid[6] & 0x0F) | 0x40; // 版本号 4
     uuid[8] = (uuid[8] & 0x3F) | 0x80; // 变体号
 
@@ -69,7 +68,10 @@ std::string User::login(const std::string&name,const std::string&password){
         connectionRAII mysqlcon(&connPool);
         sql::Connection* con = mysqlcon.getConnection();
 
-                
+        if (!con) {
+            LOG_ERROR("Failed to get database connection from pool.");
+            return ""; // 或者在 login 里 return "";
+        }        
         std::unique_ptr<sql::PreparedStatement> queryPstmt(con->prepareStatement("SELECT passwd FROM user WHERE username = ?") );
         queryPstmt -> setString(1,name);
 
@@ -78,7 +80,7 @@ std::string User::login(const std::string&name,const std::string&password){
             std::string storedPassword = res -> getString("passwd");
             size_t delimiterPos = storedPassword.find('$');
             if (delimiterPos == std::string::npos) {
-                LOG_ERROR("Stored password format error for user: %s", name.c_str());
+                LOG_ERROR("Stored password format error for user: ", name.c_str());
                 return "";
             }
             std::string salt = storedPassword.substr(0, delimiterPos); //[0:delimiterPos-1]
@@ -93,7 +95,7 @@ std::string User::login(const std::string&name,const std::string&password){
         }
         return "";
     }catch(sql::SQLException &e){
-        LOG_ERROR("SQL error: %s", e.what());
+        LOG_ERROR("SQL error: ", e.what());
         return "";
     }
 }
@@ -107,7 +109,7 @@ bool User::verify(const std::string& token){
         }else
             return false;
     }catch(const sw::redis::Error &e){
-        LOG_ERROR("Redis error: %s", e.what());
+        LOG_ERROR("Redis error: ", e.what());
         return false;
     }
 }

@@ -11,9 +11,7 @@ private:
     RedisPool redisPool;
 public:
     User(const SqlInfo& sqlInfo,const RedisInfo& redisInfo)
-    :connPool(sqlInfo),redisPool(redisInfo){
-        srand(time(NULL)); 
-    }
+    :connPool(sqlInfo),redisPool(redisInfo){}
     
     bool add(const std::string& name,const std::string& password );
     std::string generateUUID();
