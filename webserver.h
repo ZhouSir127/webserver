@@ -14,7 +14,7 @@
 #include "thread_pool/thread_pool.h"
 #include "args.h"
 #include "work_queue/work_queue.h"
-#include "death/death.h"
+#include "set/set.h"
 class WebServer
 {
 public:
@@ -31,9 +31,10 @@ WebServer(
     void eventLoop();
 
 private:    
-    Death death;
+    Set adjustment;
+    Set death;
     TimerManager timerManager;
-    WorkQueue<std::pair<int,bool> > workQueue;
+    WorkQueue<std::shared_ptr<HttpConn> > workQueue;
     HttpManager httpManager;
     ThreadPool threadPool;
     Listen listen;

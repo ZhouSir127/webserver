@@ -12,7 +12,7 @@ WebServer::WebServer(
 :timerManager(timerInfo, death),
 workQueue(threadPoolInfo.maxRequest,false),
 httpManager(httpInfo,sqlInfo,redisInfo,workQueue,death),
-threadPool(timerManager,httpManager,threadPoolInfo.threadNumer,workQueue,death),
+threadPool(threadPoolInfo.threadNumer,workQueue,death,adjustment),
 listen(listenInfo,timerManager,httpManager)
 {
     myLog::init(logInfo);
@@ -36,11 +36,16 @@ void WebServer::eventLoop()
                 break;
             }    
         }
-        if (timerManager.getTimeout() ){
+        for(int fd : adjustment.getSet() ){
+            timerManager.adjust(fd);
+            LOG_DEBUG("adjust timer of fd: ", fd);
+        }
+
+        if(timerManager.getTimeout() ){
             timerManager.timerHandler();
             LOG_DEBUG("timer tick handled");
         }
-        for(int fd : death.getDeath() ){
+        for(int fd : death.getSet() ){
             timerManager.remove(fd);
             httpManager.remove(fd);
             LOG_DEBUG("close fd: ", fd);

@@ -20,6 +20,8 @@ std::unordered_map<int,std::string> HttpConn::title {
 
 void HttpConn::init()
 {
+    isWrite = false;
+
     readBuffer.resize(1024);
     readIdx = 0;
     checkedIdx = 0;
@@ -399,6 +401,8 @@ HttpCode HttpConn::process(){
     }
     if ( !processWrite(ret) )
         return HttpCode::CLOSED_CONNECTION;
+
+    isWrite = true;
 
     return ret;
 }

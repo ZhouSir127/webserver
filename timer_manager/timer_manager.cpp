@@ -13,21 +13,21 @@ bool TimerMinHeap::keep(size_t idx){
     if (leftIdx >= size ) 
         return false;
 
-    time_t leftExpire = fdToExpireIdx[heap[leftIdx]].first;
-    time_t expire = fdToExpireIdx[heap[idx] ].first;
+    time_t leftExpire = fdToNode[heap[leftIdx]].expire;
+    time_t expire = fdToNode[heap[idx] ].expire;
     size_t rightIdx(leftIdx + 1);
 
     if(rightIdx >= size){
         if(leftExpire < expire ){
             std::swap(heap[idx], heap[leftIdx]);
 
-            fdToExpireIdx[heap[idx]].second = idx;
-            fdToExpireIdx[heap[leftIdx]].second = leftIdx;
+            fdToNode[heap[idx]].idx = idx;
+            fdToNode[heap[leftIdx]].idx = leftIdx;
             keep(leftIdx);
             return true;
         }
     }else{
-        time_t rightExpire = fdToExpireIdx[heap[rightIdx]].first;
+        time_t rightExpire = fdToNode[heap[rightIdx]].expire;
 
         if ( leftExpire < expire || rightExpire < expire )
         {
@@ -35,8 +35,8 @@ bool TimerMinHeap::keep(size_t idx){
 
             std::swap(heap[idx], heap[swapIdx]);
 
-            fdToExpireIdx[heap[idx]].second = idx;
-            fdToExpireIdx[heap[swapIdx]].second = swapIdx;
+            fdToNode[heap[idx]].idx = idx;
+            fdToNode[heap[swapIdx]].idx = swapIdx;
             keep(swapIdx);
             return true;
         }
@@ -45,57 +45,55 @@ bool TimerMinHeap::keep(size_t idx){
 }
 
 void TimerMinHeap::pop(){
-    fdToExpireIdx[heap[0]] = {-1,-1};
+    fdToNode[heap[0]] = {-1,-1};
     
     if(--size > 0){
         heap[0] = heap[size];
-        fdToExpireIdx[heap[0]].second = 0;    
+        fdToNode[heap[0]].idx = 0;    
         keep(0);
     }
 }
 
 void TimerMinHeap::add(int fd)
 {
-    std::unique_lock<std::mutex>Lock(lock);
-    fdToExpireIdx[fd] = {time(nullptr)+lifeSpan, size};
+    fdToNode[fd] = {time(nullptr)+lifeSpan, size};
     heap[size++] = fd;
 }
 
 void TimerMinHeap::adjust(int fd){
-    std::unique_lock<std::mutex>Lock(lock);
+    if(fdToNode[fd].idx == -1)
+        return;
 
-    fdToExpireIdx[fd].first = time(nullptr)+lifeSpan;
+    fdToNode[fd].expire = time(nullptr)+lifeSpan;
     
-    keep(fdToExpireIdx[fd].second);    
+    keep(fdToNode[fd].idx);    
 }
 
 void TimerMinHeap::remove(int fd)
 {    
-    std::unique_lock<std::mutex>Lock(lock);
-    
-    if (fdToExpireIdx[fd].second == -1)
+    if (fdToNode[fd].idx == -1)
         return; 
     
-    if(fdToExpireIdx[fd].second == size-1){
-        fdToExpireIdx[fd] = {-1,-1};
+    if(fdToNode[fd].idx == size-1){
+        fdToNode[fd] = {-1,-1};
         --size;
         return;
     }
 
-    size_t idx = fdToExpireIdx[fd].second;
+    size_t idx = fdToNode[fd].idx;
     heap [idx] = heap[size - 1];
-    fdToExpireIdx[heap[idx]].second = idx;
+    fdToNode[heap[idx]].idx = idx;
     --size;
     
-    fdToExpireIdx[fd] = {-1,-1};
+    fdToNode[fd] = {-1,-1};
     
     if (!keep(idx) )
     while(idx > 0){
         int parent = (idx-1) >> 1;
-        if(fdToExpireIdx[heap[parent] ].first > fdToExpireIdx[heap[idx] ].first ){
+        if(fdToNode[heap[parent] ].expire > fdToNode[heap[idx] ].expire ){
             std::swap(heap[parent], heap[idx]);
-            fdToExpireIdx[heap[parent]].second = parent;
-            fdToExpireIdx[heap[idx]].second = idx;
+            fdToNode[heap[parent]].idx = parent;
+            fdToNode[heap[idx]].idx = idx;
         }else 
             break;
         idx = parent;
@@ -104,14 +102,13 @@ void TimerMinHeap::remove(int fd)
 
 void TimerMinHeap::tick()
 {
-    std::unique_lock<std::mutex>Lock(lock);
 
     time_t now=time(nullptr);
     
     while (size > 0)
     {
         int fd = heap[0];
-        if (fdToExpireIdx[fd].first > now)
+        if (fdToNode[fd].expire > now)
             break;
     
         death.add(fd);

@@ -37,7 +37,7 @@ public:
             
             return false;
         }
-        workQueue.push(item);
+        workQueue.emplace(item);
 
         cv.notify_one();
 

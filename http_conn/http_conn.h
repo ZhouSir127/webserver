@@ -34,7 +34,7 @@
 #include "../channel/channel.h"  
 #include "../work_queue/work_queue.h"
 #include "../epoll_manager/epoll_manager.h"
-#include "../death/death.h"
+#include "../set/set.h"
 
 enum class HttpMethod
 {
@@ -96,11 +96,12 @@ private:
 
         return true;
     }
-
+    
+    bool isWrite;
     const bool isConnectEt;
     const int fd;
-    Death& death;
-    WorkQueue<std::pair<int,bool> >& workQueue;
+    Set& death;
+    WorkQueue<std::shared_ptr<HttpConn> >& workQueue;
     std::unique_ptr<Channel>httpChannel;
     
     std::string readBuffer;
@@ -134,20 +135,13 @@ private:
     size_t fileSize;   // 专门记录文件大小
     
 public:
-    HttpConn(bool connectET,int fd,Death& death,WorkQueue<std::pair<int,bool> >& workQueue,Router&router,const std::string&root)
-    :isConnectEt(connectET),fd(fd),death(death),workQueue(workQueue),httpChannel(std::make_unique<Channel>(
-        fd,
-        [this]() ->void { this->workQueue.append({this->fd, false}); },
-        [this]() ->void { this->workQueue.append({this->fd, true}); },
-        [this](){ this->death.add(this->fd); }
-    ) ),
+    HttpConn(bool connectET,int fd,Set& death,WorkQueue<std::shared_ptr<HttpConn> >& workQueue,Router&router,const std::string&root)
+    :isWrite(false),isConnectEt(connectET),fd(fd),death(death),workQueue(workQueue),
     readBuffer(1024,'\0'),readIdx(0),checkedIdx(0),startIdx(0),
     checkState(CheckState::CHECK_STATE_REQUESTLINE),method(HttpMethod::GET),isLinger(false),contentLength(0),
     router(router),root(root),
     bytesToSend(0),bytesHaveSent(0),ioVectorCount(1),ioVectorIdx(0),fileAddress(nullptr),fileSize(0)
-    {
-        EpollManager::getInstance().add(httpChannel.get(),EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (connectET ? EPOLLET : static_cast<uint32_t>(0)) );
-    }
+    {}
     ~HttpConn(){
         if (fileAddress) {
             munmap(fileAddress, fileSize);
@@ -162,6 +156,18 @@ public:
     HttpCode process();
     HttpCode write();
     bool getLinger() const { return isLinger;}
+    bool getWrite() const {return isWrite;}
+    int getFd() const {return fd;}
+    void setChannel(const std::shared_ptr<HttpConn>&self){
+        httpChannel = std::make_unique<Channel>(
+            fd,
+            [this,self]() ->void { this->workQueue.append(self); },
+            [this,self]() ->void { this->workQueue.append(self); },
+            [this](){ this->death.add(this->fd); }
+        );
+    EpollManager::getInstance().add(httpChannel.get(),EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (isConnectEt ? EPOLLET : static_cast<uint32_t>(0)) );
+    }
+    bool getConnectEt() const { return isConnectEt; }
 };
 
 
@@ -173,12 +179,11 @@ bool isConnectEt;
 std::vector<std::shared_ptr<HttpConn> > fdToConn;
 Router router;
 const std::string&root;
-WorkQueue<std::pair<int,bool> >& workQueue;
-Death& death;
-std::mutex lock;
+WorkQueue<std::shared_ptr<HttpConn> >& workQueue;
+Set& death;
 
 public:
-    HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo,const RedisInfo& redisInfo,WorkQueue<std::pair<int,bool> >& workQueue,Death& death)
+    HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo,const RedisInfo& redisInfo,WorkQueue<std::shared_ptr<HttpConn> >& workQueue,Set& death)
     :isConnectEt(httpInfo.isConnectEt),
     fdToConn(1+consts::MAX_FD),
     router(sqlInfo,redisInfo),
@@ -188,22 +193,15 @@ public:
     {}
     
     void add(int fd){
-        std::lock_guard<std::mutex> lockGuard(lock);
         fdToConn[fd]=std::make_shared<HttpConn>(isConnectEt,fd,death,workQueue,router,root);
+        fdToConn[fd]->setChannel(fdToConn[fd]);
     }    
     //关闭连接，关闭一个连接，客户总量减一
     void remove(int fd){
-        std::lock_guard<std::mutex> lockGuard(lock);
         if(fdToConn[fd])
             fdToConn[fd].reset();
     }
 
-    std::shared_ptr<HttpConn> getSharedConn(int fd){
-        std::lock_guard<std::mutex> lockGuard(lock);
-        std::shared_ptr<HttpConn> conn = fdToConn[fd];
-        return conn;
-    }
-    bool getConnectEt() const { return isConnectEt; }
 };
 
 

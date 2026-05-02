@@ -1,31 +1,31 @@
-#ifndef DEATH_H
-#define DEATH_H
+#ifndef SET_H
+#define SET_H
 
 #include <unordered_set>
 #include <mutex>
 
-class Death
+class Set
 {
 private:
-    std::unordered_set<int>deathSet;
+    std::unordered_set<int>set;
     std::mutex lock;
 public:
     void add(int fd){
         std::unique_lock<std::mutex>Lock(lock);
-        deathSet.insert(fd);
+        set.insert(fd);
     }
 
     void clean(){
         std::unique_lock<std::mutex>Lock(lock);
-        deathSet.clear();
+        set.clear();
     }
 
-    std::unordered_set<int> getDeath(){
+    std::unordered_set<int> getSet(){
         std::unique_lock<std::mutex>Lock(lock);
         
-        std::unordered_set<int> tmp = deathSet;
+        std::unordered_set<int> tmp = set;
 
-        deathSet.clear();
+        set.clear();
         return tmp;
     }
 };

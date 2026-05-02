@@ -4,15 +4,15 @@
 #include <vector>
 
 #include "../work_queue/work_queue.h"
-#include "../death/death.h"
+#include "../set/set.h"
 #include "../http_conn/http_conn.h"
 #include "../timer_manager/timer_manager.h"
 
 class ThreadPool
 {
 public:
-    ThreadPool(TimerManager&timerManager,HttpManager&httpManager,int threadNumber,WorkQueue<std::pair<int,bool> >& workQueue,Death&death) 
-    :timerManager(timerManager),httpManager(httpManager),threadNumber(threadNumber),workQueue(workQueue),death(death){
+    ThreadPool(int threadNumber,WorkQueue<std::shared_ptr<HttpConn> >& workQueue,Set&death,Set&adjustment) 
+    :threadNumber(threadNumber),workQueue(workQueue),death(death),adjustment(adjustment){
         if (threadNumber <= 0 ) 
             throw std::invalid_argument("Invalid thread pool parameters");
             
@@ -32,13 +32,11 @@ private:
     /*工作线程运行的函数，它不断从工作队列中取出任务并执行之*/
     void run();
 
-    TimerManager &timerManager;
-    HttpManager &httpManager;
-
     size_t threadNumber;        //线程池中的线程数
     std::vector<std::thread> threads;       //描述线程池的数组，其大小为m_thread_number
-    WorkQueue<std::pair<int,bool> >& workQueue;
-    Death&death;
+    WorkQueue<std::shared_ptr<HttpConn> >& workQueue;
+    Set&death;
+    Set&adjustment;
 };
 
 #endif

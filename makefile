@@ -54,7 +54,7 @@ LDFLAGS  := -pthread -lmysqlcppconn -lmavsdk -lredis++ -lhiredis -lcrypto
 # 5. 目录与文件自动发现
 # ----------------------------------------------------------------------------
 # 【重大修改】：确保加入了 user 和 redis_pool 目录
-SRC_DIRS := . channel connection_pool crypto_util death epoll_manager http_conn listen log redis_pool router thread_pool timer_manager user work_queue  
+SRC_DIRS := . channel connection_pool crypto_util set epoll_manager http_conn listen log redis_pool router thread_pool timer_manager user work_queue  
 SRCS     := $(foreach dir, $(SRC_DIRS), $(wildcard $(dir)/*.cpp))
 OBJS     := $(patsubst %.cpp, %.o, $(SRCS))
 DEPS     := $(OBJS:.o=.d)

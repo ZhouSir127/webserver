@@ -12,40 +12,41 @@
 #include <assert.h>
 #include <sys/stat.h>
 #include <pthread.h>
-
 #include <sys/mman.h>
 #include <stdarg.h>
-
 #include <sys/wait.h>
 #include <sys/uio.h>
-
 #include <time.h>
-
 #include <vector>
-#include <mutex>
 #include <memory>
-
 #include "../consts.h"
 #include "../args.h"
 #include "../epoll_manager/epoll_manager.h"
 #include "../channel/channel.h"
-#include "../death/death.h"
+#include "../set/set.h"
 #include <fcntl.h>
+// #include "../big_int/big_int.h"
 
 class TimerMinHeap
 {
 private:
-    std::mutex lock;
+    using Node = struct {
+        time_t expire;
+        int idx;
+        // std::string ID;
+    };
+
     time_t lifeSpan;
-    std::vector<std::pair<time_t, size_t> > fdToExpireIdx;//{死期，在堆索引}    
-    size_t size;
+    std::vector<Node> fdToNode;//{死期，在堆索引}    
+    int size;
     std::vector<int>heap;
-    Death&death;
+    Set&death;
+    //BigInt ID;  
     bool keep(size_t idx);
     void pop();
 
 public:
-    TimerMinHeap(time_t lifeSpan, Death& death):lifeSpan(lifeSpan),fdToExpireIdx(consts::MAX_FD+1,{-1,-1} ),size(0),heap(consts::MAX_FD+1,-1),death(death){}
+    TimerMinHeap(time_t lifeSpan, Set& death):lifeSpan(lifeSpan),fdToNode(consts::MAX_FD+1,{-1,-1} ),size(0),heap(consts::MAX_FD+1,-1),death(death){}
     
     void add(int fd);
     void adjust(int fd);
@@ -119,7 +120,7 @@ private:
 class TimerManager{
 
 public:
-    TimerManager(const TimerInfo& timerInfo, Death& death):heap(timerInfo.lifeSpan, death){
+    TimerManager(const TimerInfo& timerInfo, Set& death):heap(timerInfo.lifeSpan, death){
         SignalHandler::init(timerInfo.timeSlot);
     }
     ~TimerManager(){
