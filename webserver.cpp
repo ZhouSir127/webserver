@@ -6,8 +6,7 @@ WebServer::WebServer(
                 const TimerInfo& timerInfo,
                 const HttpInfo& httpInfo,const SqlInfo& sqlInfo,const RedisInfo& redisInfo,
                 const ThreadPoolInfo& threadPoolInfo,
-                const ListenInfo& listenInfo,  
-                const LogInfo& logInfo  
+                const ListenInfo& listenInfo
             )
 :timerManager(timerInfo, death),
 workQueue(threadPoolInfo.maxRequest,false),
@@ -15,7 +14,6 @@ httpManager(httpInfo,sqlInfo,redisInfo,workQueue,death),
 threadPool(threadPoolInfo.threadNumer,workQueue,death,adjustment),
 listen(listenInfo,timerManager,httpManager)
 {
-    myLog::init(logInfo);
     LOG_INFO("========== WebServer initialized and starting ==========");
 }
 
@@ -36,16 +34,20 @@ void WebServer::eventLoop()
                 break;
             }    
         }
-        for(int fd : adjustment.getSet() ){
-            timerManager.adjust(fd);
-            LOG_DEBUG("adjust timer of fd: ", fd);
-        }
+        
+        std::unordered_set<int> dead = death.getSet(); 
+        
+        for(int fd : adjustment.getSet() )
+            if(dead.find(fd) == dead.end() ){
+                timerManager.adjust(fd);
+                LOG_DEBUG("adjust timer of fd: ", fd);
+            }
 
         if(timerManager.getTimeout() ){
             timerManager.timerHandler();
             LOG_DEBUG("timer tick handled");
         }
-        for(int fd : death.getSet() ){
+        for(int fd : dead ){
             timerManager.remove(fd);
             httpManager.remove(fd);
             LOG_DEBUG("close fd: ", fd);

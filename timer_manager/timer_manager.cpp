@@ -83,8 +83,8 @@ void TimerMinHeap::remove(int fd)
     size_t idx = fdToNode[fd].idx;
     heap [idx] = heap[size - 1];
     fdToNode[heap[idx]].idx = idx;
-    --size;
     
+    --size;
     fdToNode[fd] = {-1,-1};
     
     if (!keep(idx) )

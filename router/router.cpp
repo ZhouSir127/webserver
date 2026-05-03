@@ -24,8 +24,8 @@ Router::Router(const SqlInfo &sqlInfo,const RedisInfo &redisInfo)
                if (!mavsdkPtr) {
                  mavsdk::Mavsdk::Configuration config(mavsdk::ComponentType::CompanionComputer);
                  mavsdkPtr = std::make_shared<mavsdk::Mavsdk>(config);
-                 mavsdkPtr->add_any_connection("udpin://0.0.0.0:14540");
-                 LOG_INFO("正在初始化 MAVSDK 并监听 udpin://0.0.0.0:14540...");
+                 mavsdkPtr->add_any_connection("udpin://0.0.0.0:14580");
+                 LOG_INFO("正在初始化 MAVSDK 并监听 udpin://0.0.0.0:14580...");
                }
              }
 

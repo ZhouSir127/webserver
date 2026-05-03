@@ -45,13 +45,12 @@ int main()
         sysLog::CLOSE,
         sysLog::MAX_REQUEST
     };
-
+    myLog::init(logInfo);
     WebServer server(
                 timerInfo,
                 httpInfo,sqlInfo,redisInfo,
                 threadPoolInfo,
-                listenInfo,  
-                logInfo
+                listenInfo
         );
     //运行
     server.eventLoop();

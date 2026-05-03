@@ -22,8 +22,7 @@ WebServer(
         const TimerInfo& timerInfo,
         const HttpInfo& httpInfo,const SqlInfo& sqlInfo,const RedisInfo& redisInfo,
         const ThreadPoolInfo& threadPoolInfo,
-        const ListenInfo& listenInfo,  
-        const LogInfo& logInfo
+        const ListenInfo& listenInfo
         );
     
     ~WebServer();
