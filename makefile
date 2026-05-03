@@ -95,20 +95,20 @@ $(TARGET): $(OBJS)
 clean:
 	@echo "[CLEAN] 删除编译产物..."
 	@rm -f $(OBJS) $(DEPS) $(TARGET)
-
 # ----------------------------------------------------------------------------
-# 9. 自动化运行
+# 9. 自动化运行 
 # ----------------------------------------------------------------------------
-# 根据你的代码上下文，默认端口设置为了 9006
 PORT ?= 8080
 
 run: all
-	@echo "[PRE-CHECK] 检查端口 $(PORT) 占用..."
+	@echo "[PRE-CHECK] 正在清理旧的 WebServer..."
+	# -x 参数确保只杀死进程名完全等于 "server" 的进程，不会误杀 "tmux: server"
+	@pkill -9 -x $(TARGET) > /dev/null 2>&1 || true
 	@fuser -k $(PORT)/tcp > /dev/null 2>&1 || true
-	@sleep 0.5
+	@sleep 0.2
 	@echo "[RUN] 启动服务器..."
 	@./$(TARGET)
-
 stop:
-	@echo "[STOP] 关闭端口 $(PORT) 进程..."
+	@echo "[STOP] 停止 WebServer..."
+	@pkill -9 $(TARGET) > /dev/null 2>&1 || true
 	@fuser -k $(PORT)/tcp > /dev/null 2>&1 || true

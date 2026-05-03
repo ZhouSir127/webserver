@@ -59,17 +59,22 @@
         function sendCommand(routePattern, actionName) {
             logMsg(`>>> 发送指令: [/${routePattern}] ${actionName}`);
             
-            // 使用 GET 请求，匹配 C++ Router 中的 getRoutes
             fetch(`/${routePattern}`, { method: 'GET' })
-                .then(response => {
-                    if (response.ok) {
-                        logMsg(`<<< 指令 [${actionName}] 已成功送达`);
+                .then(response => response.json()) // 解析 JSON
+                .then(data => {
+                    if (data.status === 'success') {
+                        // 如果是位置信息，展示具体数值
+                        if (data.lat) {
+                            logMsg(`🌍 位置更新: 纬度 ${data.lat.toFixed(6)}, 经度 ${data.lng.toFixed(6)}, 高度 ${data.alt.toFixed(1)}m`);
+                        } else {
+                            logMsg(`✅ [${actionName}] 执行成功: ${data.msg || ''}`);
+                        }
                     } else {
-                        logMsg(`[错误] 请求被拒绝, 状态码: ${response.status}`, true);
+                        logMsg(`❌ [${actionName}] 失败: ${data.msg}`, true);
                     }
                 })
                 .catch(err => {
-                    logMsg(`[错误] 服务器无响应或网络断开`, true);
+                    logMsg(`[错误] 通信异常，请检查后端 ./server 是否崩溃`, true);
                 });
         }
 
