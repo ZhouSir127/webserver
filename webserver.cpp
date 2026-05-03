@@ -10,7 +10,7 @@ WebServer::WebServer(
             )
 :timerManager(timerInfo, death),
 workQueue(threadPoolInfo.maxRequest,false),
-httpManager(httpInfo,sqlInfo,redisInfo,workQueue,death),
+httpManager(httpInfo,sqlInfo,redisInfo,workQueue),
 threadPool(threadPoolInfo.threadNumer,workQueue,death,adjustment),
 listen(listenInfo,timerManager,httpManager)
 {

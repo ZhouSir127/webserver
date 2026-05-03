@@ -52,9 +52,6 @@ std::unique_ptr<sql::Connection> ConnectionPool::getConnection()
 //释放当前使用的连接
 bool ConnectionPool::releaseConnection( std::unique_ptr<sql::Connection> con)
 {
-	if (!con)
-		return false;
-
 	std::unique_lock<std::mutex>Lock(lock);
 	connQueue.push(std::move(con) );
 

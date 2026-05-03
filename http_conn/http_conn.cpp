@@ -20,8 +20,6 @@ std::unordered_map<int,std::string> HttpConn::title {
 
 void HttpConn::init()
 {
-    isWrite = false;
-
     readBuffer.resize(1024);
     readIdx = 0;
     checkedIdx = 0;
@@ -81,46 +79,45 @@ HttpCode HttpConn::parseLine()
 
 //循环读取客户数据，直到无数据可读或对方关闭连接
 //非阻塞ET工作模式下，需要一次性将数据读完
-HttpCode HttpConn::readOnce()
+HttpCode HttpConn::read()
 {
     //LT读取数据
     if (!isConnectEt){
-        if(readBuffer.size()==readIdx){
+        if( readBuffer.size() == readIdx ){
             if(readBuffer.size() == consts::READ_BUFFER_SIZE){
                 LOG_WARN("Read buffer overflow (LT). Malicious client? fd: ", fd);
-                return HttpCode::BAD_REQUEST;
+                return HttpCode::GET_REQUEST;
             }
             readBuffer.resize( std::min( (readBuffer.size()<<1),consts::READ_BUFFER_SIZE) );
         }
-        ssize_t bytes_read = recv(fd, &readBuffer[readIdx] ,readBuffer.size()-readIdx,0);
+        int bytesRead = recv(fd, &readBuffer[readIdx] ,readBuffer.size()-readIdx,0);
     
-        if (bytes_read < 0 ){
-            if (errno == EAGAIN || errno == EINTR)//无数据可读
-                return HttpCode::NO_REQUEST;
-            return HttpCode::BAD_REQUEST;//读故障
-        }else if (bytes_read == 0)//对方正常关闭了连接
+        if (bytesRead < 0 ){
+            if (errno == EAGAIN || errno == EINTR)
+                return HttpCode::GET_REQUEST;
+            return HttpCode::BAD_REQUEST;
+        }else if (bytesRead == 0)
             return HttpCode::CLOSED_CONNECTION;
         
-        readIdx += bytes_read;
+        readIdx += bytesRead;
     }else
-        while (true)
-        {    
+        while (true){    
             if(readBuffer.size()==readIdx){
                 if(readBuffer.size() == consts::READ_BUFFER_SIZE){
                     LOG_WARN("Read buffer overflow (ET). Malicious client? fd: ", fd);
-                    return HttpCode::BAD_REQUEST;
+                    break;
                 }
                 readBuffer.resize(std::min( (readBuffer.size()<<1),consts::READ_BUFFER_SIZE) );
             }
-            ssize_t bytes_read = recv(fd, &readBuffer[readIdx], readBuffer.size()-readIdx , 0);
-            if (bytes_read < 0 ){
+            int bytesRead = recv(fd, &readBuffer[readIdx], readBuffer.size()-readIdx , 0);
+            if (bytesRead < 0 ){
                 if (errno == EAGAIN || errno == EINTR)
                     break;
                 return HttpCode::BAD_REQUEST;
-            }else if (bytes_read == 0)
+            }else if (bytesRead == 0)
                 return HttpCode::CLOSED_CONNECTION;
             
-            readIdx += bytes_read;
+            readIdx += bytesRead;
         }
     return HttpCode:: GET_REQUEST;
 }
@@ -201,10 +198,6 @@ HttpCode HttpConn::parseHeaders()
 
 HttpCode HttpConn::processRead()
 {
-    HttpCode ret = readOnce();
-    if ( ret != HttpCode:: GET_REQUEST )//对方关闭了连接或读故障或缓冲大小上限或
-        return ret;
-    
     while(true)
         if(checkState == CheckState::CHECK_STATE_CONTENT){
             if (contentLength == 0) 
@@ -216,13 +209,13 @@ HttpCode HttpConn::processRead()
                 checkedIdx = startIdx + contentLength ;
                 //POST请求中最后为输入的用户名和密码
                 requestBody = std::string(readBuffer.begin() + startIdx ,readBuffer.begin() + checkedIdx);
-                
+                startIdx = checkedIdx;    
                 return doRequest();
             }
             
             return HttpCode::NO_REQUEST;
         }else{
-            ret = parseLine();
+            HttpCode ret = parseLine();
             if (ret != HttpCode::GET_REQUEST )
                 return ret;
             
@@ -401,8 +394,6 @@ HttpCode HttpConn::process(){
     }
     if ( !processWrite(ret) )
         return HttpCode::CLOSED_CONNECTION;
-
-    isWrite = true;
 
     return ret;
 }

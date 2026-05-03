@@ -1,6 +1,8 @@
 #include "channel.h"
 #include "../log/log.h"
-void Channel::handleEvent(uint32_t revents) {
+void Channel::handleEvent(uint32_t reventsFromEpoll) {
+    revents = reventsFromEpoll;
+    
     // 根据 epoll 传回的具体事件(revents_)，调用对应的回调
     if( revents & (EPOLLIN | EPOLLPRI) ){
         if(readCallback)

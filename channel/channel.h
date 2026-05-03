@@ -9,7 +9,8 @@ class Channel {
 private:
     using EventCallback = std::function<void()>;
     const int fd;
-    
+    uint32_t revents;
+
     EventCallback readCallback;
     EventCallback writeCallback;
     EventCallback errorCallback;
@@ -18,9 +19,9 @@ public:
     Channel(int fd,EventCallback&&readCb, EventCallback&&writeCb, EventCallback&&errorCb)
     : fd(fd), readCallback(std::move(readCb)), writeCallback(std::move(writeCb)), errorCallback(std::move(errorCb) ) {}
     // 核心：当 epoll 触发时，统一调用此函数
-    void handleEvent(uint32_t revents);
+    void handleEvent(uint32_t);
     int getFd() const { return fd; }
-    // ... 其他 getter/setter
+    uint32_t getRevents()const {return revents;};
 };
 
 #endif // CHANNEL_H

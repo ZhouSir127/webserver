@@ -73,7 +73,6 @@ private:
     static std::unordered_map<int,std::string> title;
 
     HttpCode processRead();
-    HttpCode readOnce();
     HttpCode parseLine();
     HttpCode parseRequestLine();
     HttpCode parseHeaders();
@@ -97,10 +96,8 @@ private:
         return true;
     }
     
-    bool isWrite;
     const bool isConnectEt;
     const int fd;
-    Set& death;
     WorkQueue<std::shared_ptr<HttpConn> >& workQueue;
     std::unique_ptr<Channel>httpChannel;
     
@@ -135,8 +132,8 @@ private:
     size_t fileSize;   // 专门记录文件大小
     
 public:
-    HttpConn(bool connectET,int fd,Set& death,WorkQueue<std::shared_ptr<HttpConn> >& workQueue,Router&router,const std::string&root)
-    :isWrite(false),isConnectEt(connectET),fd(fd),death(death),workQueue(workQueue),
+    HttpConn(bool connectET,int fd,WorkQueue<std::shared_ptr<HttpConn> >& workQueue,Router&router,const std::string&root)
+    :isConnectEt(connectET),fd(fd),workQueue(workQueue),
     readBuffer(1024,'\0'),readIdx(0),checkedIdx(0),startIdx(0),
     checkState(CheckState::CHECK_STATE_REQUESTLINE),method(HttpMethod::GET),isLinger(false),contentLength(0),
     router(router),root(root),
@@ -151,23 +148,24 @@ public:
         close(fd);
     }
 
+    HttpCode read();
     Channel*getChannel() const { return httpChannel.get(); }
     void init();
     HttpCode process();
     HttpCode write();
     bool getLinger() const { return isLinger;}
-    bool getWrite() const {return isWrite;}
     int getFd() const {return fd;}
     void setChannel(const std::shared_ptr<HttpConn>&self){
         httpChannel = std::make_unique<Channel>(
             fd,
+            [this,self]() ->void { ;this->workQueue.append(self); },
             [this,self]() ->void { this->workQueue.append(self); },
-            [this,self]() ->void { this->workQueue.append(self); },
-            [this](){ this->death.add(this->fd); }
+            [this,self]() ->void { this->workQueue.append(self); }
         );
     EpollManager::getInstance().add(httpChannel.get(),EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (isConnectEt ? EPOLLET : static_cast<uint32_t>(0)) );
     }
     bool getConnectEt() const { return isConnectEt; }
+    bool parseEnd()const {return readIdx == checkedIdx;}
 };
 
 
@@ -180,20 +178,18 @@ std::vector<std::shared_ptr<HttpConn> > fdToConn;
 Router router;
 const std::string&root;
 WorkQueue<std::shared_ptr<HttpConn> >& workQueue;
-Set& death;
 
 public:
-    HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo,const RedisInfo& redisInfo,WorkQueue<std::shared_ptr<HttpConn> >& workQueue,Set& death)
+    HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo,const RedisInfo& redisInfo,WorkQueue<std::shared_ptr<HttpConn> >& workQueue)
     :isConnectEt(httpInfo.isConnectEt),
     fdToConn(1+consts::MAX_FD),
     router(sqlInfo,redisInfo),
     root(httpInfo.root),
-    workQueue(workQueue),
-    death(death)
+    workQueue(workQueue)
     {}
     
     void add(int fd){
-        fdToConn[fd]=std::make_shared<HttpConn>(isConnectEt,fd,death,workQueue,router,root);
+        fdToConn[fd]=std::make_shared<HttpConn>(isConnectEt,fd,workQueue,router,root);
         fdToConn[fd]->setChannel(fdToConn[fd]);
     }    
     //关闭连接，关闭一个连接，客户总量减一
