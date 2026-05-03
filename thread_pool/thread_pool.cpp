@@ -7,7 +7,7 @@ void ThreadPool::run()
     {
         std::shared_ptr<HttpConn> conn;
         if ( workQueue.getWork(conn) == false )
-            return; // 工作队列已停止且没有任务，退出线程
+            return; 
 
         if (conn.use_count() == 1)
             continue;
@@ -21,42 +21,44 @@ void ThreadPool::run()
                 case HttpCode::GET_REQUEST:   
                     EpollManager::getInstance().modify(conn->getChannel(), EPOLLOUT | EPOLLRDHUP | EPOLLONESHOT | (conn ->getConnectEt() ? EPOLLET : static_cast<uint32_t>(0)) );
                     adjustment.add(conn -> getFd() );
+                    break;
                 default:
                     break;
             }
         }else if(conn -> getChannel()->getRevents() & EPOLLOUT ){
-            while(conn -> parseEnd() == false){
-                switch(conn->process() ){//读处理后，无需响应直接关闭
-                    case HttpCode::CLOSED_CONNECTION:
-                        death.add(conn -> getFd() );
-                        break;
-                    case HttpCode::NO_REQUEST://继续读
-                        EpollManager::getInstance().modify(conn->getChannel(), EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (conn ->getConnectEt() ? EPOLLET : static_cast<uint32_t>(0)) );
-                        adjustment.add(conn -> getFd() );
-                        break;
-                    case HttpCode::GET_REQUEST://读处理后需要响应
-                    case HttpCode::BAD_REQUEST:
-                    case HttpCode::NO_RESOURCE:
-                    case HttpCode::FORBIDDEN_REQUEST:
-                    case HttpCode::FILE_REQUEST:
-                        EpollManager::getInstance().modify(conn->getChannel(), EPOLLOUT | EPOLLRDHUP | EPOLLONESHOT | (conn ->getConnectEt() ? EPOLLET : static_cast<uint32_t>(0)) );
-                        adjustment.add(conn -> getFd() );
-                        break;
-                    default:
-                        break;
-                }            
+            HttpCode ret = HttpCode::GET_REQUEST;
+            bool dead(false);
 
-                HttpCode ret = conn->write();
-        
-                if ( ret == HttpCode::NO_REQUEST ){//继续写
+            do{
+
+            if(){
+                ret = conn->process();
+                if( ret == HttpCode::CLOSED_CONNECTION){
+                    death.add(conn -> getFd() );
+                    dead = true;
+                    break;
+                }else if ( ret == HttpCode::NO_REQUEST){
+                    EpollManager::getInstance().modify(conn->getChannel(), EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (conn ->getConnectEt() ? EPOLLET : static_cast<uint32_t>(0)) );
+                    adjustment.add(conn -> getFd() );
+                    break;
+                }    // GET_REQUEST,BAD_REQUEST,NO_RESOURCE,FORBIDDEN_REQUEST,FILE_REQUEST,
+            }
+                ret = conn->write();
+                
+                if ( ret == HttpCode::NO_REQUEST ){
                     EpollManager::getInstance().modify(conn->getChannel(), EPOLLOUT | EPOLLRDHUP | EPOLLONESHOT | (conn ->getConnectEt() ? EPOLLET : static_cast<uint32_t>(0)) );
                     adjustment.add(conn -> getFd() );
-                }else if ( ret == HttpCode::GET_REQUEST && conn->getLinger() ){
-                    EpollManager::getInstance() .modify(conn->getChannel(), EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (conn ->getConnectEt() ? EPOLLET : static_cast<uint32_t>(0)) );
-                    conn->init();
-                    adjustment.add(conn -> getFd() );
-                }else
+                    break;
+                }else if ( !(ret == HttpCode::GET_REQUEST && conn->getLinger() ) ){
                     death.add(conn -> getFd() );
+                    dead = true;
+                    break;
+                }
+            }while( parseEnd()==false ||  sendEnd() == false );
+            if(ret != HttpCode::NO_REQUEST && dead == false ){
+                conn->init();
+                EpollManager::getInstance().modify(conn->getChannel(), EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (conn ->getConnectEt() ? EPOLLET : static_cast<uint32_t>(0)) );
+                adjustment.add(conn -> getFd() );
             }
         }else
             death.add(conn->getFd() );

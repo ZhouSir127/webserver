@@ -22,5 +22,4 @@ void Channel::handleEvent(uint32_t reventsFromEpoll) {
         else 
             LOG_WARN("epoll failure");
     }
-    // 还可以增加错误处理 EPOLLERR 等
 }

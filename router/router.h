@@ -10,17 +10,20 @@
 #include <mavsdk/plugins/action/action.h>
 #include <mavsdk/plugins/telemetry/telemetry.h>
 #include <mutex>
+#include <atomic>
 #include "../user/user.h"
 #include "../args.h"
 
-class HttpConn;
+class Message;
 
 class Router{
 
 private:
-    using HttpHandler = std::function<void(HttpConn*)>;
+    using HttpHandler = std::function<void(Message*)>;
 
     User user;
+    // 在 router.h 的 private 成员中加入：
+    std::atomic<bool> isConnecting{false};
     std::shared_ptr<mavsdk::Mavsdk> mavsdkPtr;
     std::shared_ptr<mavsdk::System> drone;
     std::shared_ptr<mavsdk::Action> action;
@@ -28,9 +31,10 @@ private:
     std::unordered_map<std::string,HttpHandler> getRoutes;
     std::unordered_map<std::string,HttpHandler> postRoutes;
     std::mutex lock;
-public:
-    Router(const SqlInfo&,const RedisInfo&);
-    void route(HttpConn* conn);
+    const std::string&root;
+    public:
+    Router(const SqlInfo&,const RedisInfo&,const std::string&root);
+    void route(Message* conn);
 };
 
 

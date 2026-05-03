@@ -1,45 +1,19 @@
 [
   {
+    "directory": "/root/webserver",
     "arguments": [
       "/usr/bin/g++",
       "-std=c++17",
       "-pthread",
-      "-Wall",
-      "-Wextra",
-      "-Wpedantic",
-      "-Werror",
-      "-Wold-style-cast",
-      "-Wuseless-cast",
-      "-Wdouble-promotion",
-      "-Wcast-align",
-      "-Wcast-qual",
-      "-Wnon-virtual-dtor",
-      "-Woverloaded-virtual",
-      "-Wnull-dereference",
-      "-Wvla",
-      "-Wdelete-incomplete",
-      "-Wformat=2",
-      "-Wmissing-declarations",
-      "-Wduplicated-cond",
-      "-Wduplicated-branches",
-      "-Wlogical-op",
-      "-Wno-sign-compare",
-      "-Wno-enum-compare",
-      "-Wno-implicit-int-conversion",
-      "-Wno-conditional-type-mismatch",
-      "-Wshadow=local",
       "-I/usr/local/include",
       "-I/usr/include/mavsdk",
       "-O3",
-      "-flto",
-      "-DNDEBUG",
       "-c",
+      "main.cpp",
       "-o",
-      "main.o",
-      "main.cpp"
+      "main.o"
     ],
-    "directory": "/root/webserver",
-    "file": "/root/webserver/main.cpp",
-    "output": "/root/webserver/main.o"
+    "file": "main.cpp",
+    "output": "main.o"
   }
 ]

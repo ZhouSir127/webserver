@@ -62,98 +62,109 @@ enum class HttpCode
     NO_RESOURCE,    
     FORBIDDEN_REQUEST,
     FILE_REQUEST,
-    CLOSED_CONNECTION
+    CLOSED_CONNECTION,
+    INTERNAL_ERROR
 };
 
-class HttpConn
-{
+class Message{
+
 private:
-    friend class Router;
-    static std::unordered_map<int,std::string> form ;
-    static std::unordered_map<int,std::string> title;
 
-    HttpCode processRead();
-    HttpCode parseLine();
-    HttpCode parseRequestLine();
-    HttpCode parseHeaders();
-    HttpCode doRequest();
+static std::unordered_map<int,std::string> form ;
+static std::unordered_map<int,std::string> title;
+
+HttpCode processRead();
+HttpCode parseLine();
+HttpCode parseRequestLine();
+HttpCode parseHeaders();
+HttpCode prepareFile();
+bool processWrite(HttpCode);
+HttpCode process(Router&);
+HttpCode write(bool,int);
+
+template<typename... Args>
+bool addResponse(Args&&... args ){
     
-    bool processWrite(HttpCode ret);
-    
-    template<typename... Args>
-    bool addResponse(Args&&... args ){
-        
-        std::stringstream ss;
-        (ss  << ... << std::forward<Args>(args) ); 
+    std::stringstream ss;
+    (ss  << ... << std::forward<Args>(args) ); 
 
-        std::string result = ss.str();
+    const std::string& result = ss.str();
 
-        if (writeBuffer.size() + result.size() > consts::WRITE_BUFFER_SIZE)
-            return false;
+    if (writeBuffer.size() + result.size() > consts::WRITE_BUFFER_SIZE)
+        return false;
 
-        writeBuffer.append(result);
+    writeBuffer.append(result);
 
-        return true;
-    }
-    
-    const bool isConnectEt;
-    const int fd;
-    WorkQueue<std::shared_ptr<HttpConn> >& workQueue;
-    std::unique_ptr<Channel>httpChannel;
-    
-    std::string readBuffer;
-    size_t readIdx;
-    size_t checkedIdx;
-    size_t startIdx;
+    return true;
+}
 
-    CheckState checkState;
-    std::string line;
-    HttpMethod method;
-    std::string url;
-    bool isLinger;
-    size_t contentLength;
-    std::string cookie; 
-    std::string requestBody;
+std::string readBuffer;
+size_t checkedIdx;
+size_t startIdx;
 
-    Router &router;
-    const std::string&root;
-    std::string realFilePath;
-    std::string token;
+CheckState checkState;
+std::string line;
 
-    std::string writeBuffer;
-    size_t bytesToSend;
-    size_t bytesHaveSent;
-    
-    struct iovec ioVectors[2];
-    int ioVectorCount;
-    int ioVectorIdx;
+HttpMethod method;
+bool isLinger;
+std::string url;
+size_t contentLength;
 
-    char* fileAddress; // 专门用来记录 mmap 的原地址
-    size_t fileSize;   // 专门记录文件大小
-    
+std::string cookie; 
+std::string requestBody;
+
+std::string realFilePath;
+std::string token;
+
+std::string writeBuffer;
+struct iovec ioVectors[2];
+int ioVectorCount;
+int ioVectorIdx;
+
+char* fileAddress; // 专门用来记录 mmap 的原地址
+size_t fileSize;   // 专门记录文件大小
+
 public:
-    HttpConn(bool connectET,int fd,WorkQueue<std::shared_ptr<HttpConn> >& workQueue,Router&router,const std::string&root)
-    :isConnectEt(connectET),fd(fd),workQueue(workQueue),
-    readBuffer(1024,'\0'),readIdx(0),checkedIdx(0),startIdx(0),
-    checkState(CheckState::CHECK_STATE_REQUESTLINE),method(HttpMethod::GET),isLinger(false),contentLength(0),
-    router(router),root(root),
-    bytesToSend(0),bytesHaveSent(0),ioVectorCount(1),ioVectorIdx(0),fileAddress(nullptr),fileSize(0)
+    Message():readBuffer(1024,'\0'),checkedIdx(0),startIdx(0),
+    checkState(CheckState::CHECK_STATE_REQUESTLINE),method(HttpMethod::GET),isLinger(true),contentLength(0),
+    ioVectorCount(1),ioVectorIdx(0),fileAddress(nullptr),fileSize(0)
     {}
-    ~HttpConn(){
+
+    ~Message(){
         if (fileAddress) {
             munmap(fileAddress, fileSize);
             fileAddress = nullptr;
         }
+    }
+    void setFile(std::string&& str){realFilePath = str;}
+    const std::string& getBody()const {return requestBody;}
+    const std::string& getURL() const{return url;}
+    HttpMethod getMethod() const {return method;}
+    const std::string&getCookie()const {return cookie;}
+    void setToken(const std::string&token) {this -> token = token;}
+};
+
+class HttpConn
+{
+private:    
+    const bool isConnectEt;
+    const int fd;
+    WorkQueue<std::shared_ptr<HttpConn> >& workQueue;
+    std::unique_ptr<Channel>httpChannel;
+    bool isLinger;
+    Router&router;
+
+public:
+    HttpConn(bool connectET,int fd,WorkQueue<std::shared_ptr<HttpConn> >& workQueue,Router&router)
+    :isConnectEt(connectET),fd(fd),workQueue(workQueue),isLinger(true),router(router)
+    {}
+    ~HttpConn(){
         EpollManager::getInstance().remove(httpChannel.get() );
         close(fd);
     }
 
     HttpCode read();
     Channel*getChannel() const { return httpChannel.get(); }
-    void init();
-    HttpCode process();
-    HttpCode write();
-    bool getLinger() const { return isLinger;}
     int getFd() const {return fd;}
     void setChannel(const std::shared_ptr<HttpConn>&self){
         httpChannel = std::make_unique<Channel>(
@@ -165,7 +176,6 @@ public:
     EpollManager::getInstance().add(httpChannel.get(),EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (isConnectEt ? EPOLLET : static_cast<uint32_t>(0)) );
     }
     bool getConnectEt() const { return isConnectEt; }
-    bool parseEnd()const {return readIdx == checkedIdx;}
 };
 
 
@@ -176,20 +186,18 @@ private:
 bool isConnectEt;
 std::vector<std::shared_ptr<HttpConn> > fdToConn;
 Router router;
-const std::string&root;
 WorkQueue<std::shared_ptr<HttpConn> >& workQueue;
 
 public:
     HttpManager(const HttpInfo& httpInfo,const SqlInfo& sqlInfo,const RedisInfo& redisInfo,WorkQueue<std::shared_ptr<HttpConn> >& workQueue)
     :isConnectEt(httpInfo.isConnectEt),
     fdToConn(1+consts::MAX_FD),
-    router(sqlInfo,redisInfo),
-    root(httpInfo.root),
+    router(sqlInfo,redisInfo,httpInfo.root),
     workQueue(workQueue)
     {}
     
     void add(int fd){
-        fdToConn[fd]=std::make_shared<HttpConn>(isConnectEt,fd,workQueue,router,root);
+        fdToConn[fd]=std::make_shared<HttpConn>(isConnectEt,fd,workQueue,router);
         fdToConn[fd]->setChannel(fdToConn[fd]);
     }    
     //关闭连接，关闭一个连接，客户总量减一
