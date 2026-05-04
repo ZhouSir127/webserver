@@ -20,214 +20,194 @@ std::unordered_map<int,std::string> Message::title {
     {500,"Internal Server Error"}
 };    
 
-
-
-HttpCode Message::parseLine()
+void Message::parseLine()
 {
-    while (checkedIdx < readBuffer.size() ){
+    while (checkedIdx < endIdx ){
+        int next = (checkedIdx + 1)%consts::READ_BUFFER_SIZE; 
         if ( readBuffer[checkedIdx] == '\r'){
-            if ( checkedIdx + 1 == readBuffer.size() )
-                return HttpCode::NO_REQUEST;
-            else if ( readBuffer[checkedIdx+1] == '\n'){
-                line = std::string(readBuffer.begin() + startIdx , readBuffer.begin() + checkedIdx);
+            if ( next == endIdx ){
+                status = HttpCode::NO_REQUEST;
+                return;
+            }else if ( readBuffer[next] == '\n'){
+                if(startIdx <= checkedIdx)
+                    line = std::string(readBuffer.begin() + startIdx , readBuffer.begin() + checkedIdx);
+                else
+                    line = readBuffer.substr(startIdx)+std::string(readBuffer.begin(),readBuffer.begin() + checkedIdx ) ;
                 
-                checkedIdx += 2;
-                startIdx = checkedIdx;
-
-                return HttpCode::GET_REQUEST;
-            }else
-                return HttpCode::BAD_REQUEST;
+                startIdx = checkedIdx = (next+1)%consts::READ_BUFFER_SIZE;
+                
+                status = HttpCode::GET_REQUEST;
+                return;
+            }else{
+                status = HttpCode::BAD_REQUEST;
+                return;
+            }
         }
-        ++checkedIdx;
+        checkedIdx = next;
     }
-    return HttpCode::NO_REQUEST;
+    status = HttpCode::NO_REQUEST;
 }
 
-//循环读取客户数据，直到无数据可读或对方关闭连接
-//非阻塞ET工作模式下，需要一次性将数据读完
-// HttpCode HttpConn::read()
-// {
-//     //LT读取数据
-//     if (!isConnectEt){
-//         if( readBuffer.size() == readIdx ){
-//             if(readBuffer.size() == consts::READ_BUFFER_SIZE){
-//                 LOG_WARN("Read buffer overflow (LT). Malicious client? fd: ", fd);
-//                 return HttpCode::GET_REQUEST;
-//             }
-//             readBuffer.resize( std::min( (readBuffer.size()<<1),consts::READ_BUFFER_SIZE) );
-//         }
-//         int bytesRead = recv(fd, &readBuffer[readIdx] ,readBuffer.size()-readIdx,0);
-    
-//         if (bytesRead < 0 ){
-//             if (errno == EAGAIN || errno == EINTR)
-//                 return HttpCode::GET_REQUEST;
-//             return HttpCode::BAD_REQUEST;
-//         }else if (bytesRead == 0)
-//             return HttpCode::CLOSED_CONNECTION;
-        
-//         readIdx += bytesRead;
-//     }else
-//         while (true){    
-//             if(readBuffer.size()==readIdx){
-//                 if(readBuffer.size() == consts::READ_BUFFER_SIZE){
-//                     LOG_WARN("Read buffer overflow (ET). Malicious client? fd: ", fd);
-//                     break;
-//                 }
-//                 readBuffer.resize(std::min( (readBuffer.size()<<1),consts::READ_BUFFER_SIZE) );
-//             }
-//             int bytesRead = recv(fd, &readBuffer[readIdx], readBuffer.size()-readIdx , 0);
-//             if (bytesRead < 0 ){
-//                 if (errno == EAGAIN || errno == EINTR)
-//                     break;
-//                 return HttpCode::BAD_REQUEST;
-//             }else if (bytesRead == 0)
-//                 return HttpCode::CLOSED_CONNECTION;
-            
-//             readIdx += bytesRead;
-//         }
-//     return HttpCode:: GET_REQUEST;
-// }
-
 //解析http请求行，获得请求方法，目标url及http版本号
-HttpCode Message::parseRequestLine()
+void Message::parseRequestLine()
 {
     std::istringstream iss(line);
     std::string token;
 
-    if(!(iss >> token) )
-        return HttpCode::BAD_REQUEST;
+    if(!(iss >> token) ){
+        status = HttpCode::BAD_REQUEST;
+        return;
+    }
     if ( strcasecmp(token.c_str(),"GET") == 0 )
         method = HttpMethod::GET;
     else if (  strcasecmp(token.c_str(),"POST") == 0 )
         method = HttpMethod::POST;
-    else
-        return HttpCode::BAD_REQUEST;
+    else{
+        status = HttpCode::BAD_REQUEST;
+        return;
+    }
 
-
-
-    if(!(iss >> token) )
-        return HttpCode::BAD_REQUEST;
-    
+    if(!(iss >> token) ){
+        status = HttpCode::BAD_REQUEST;
+        return;
+    }
     size_t pos(0);
 
     if ( strncasecmp(token.c_str(),"http://",7) == 0){
         pos = token.find_first_of('/',7);
-        if (pos == std::string::npos )
-            return HttpCode::BAD_REQUEST;
+        if (pos == std::string::npos ){
+            status = HttpCode::BAD_REQUEST;
+            return;
+        }
     }else if (strncasecmp(token.c_str(),"https://",8) == 0){
         pos = token.find_first_of('/',8);
-        if ( pos == std::string::npos )
-            return HttpCode::BAD_REQUEST;
-    }else if(token[0] != '/')
-        return HttpCode::BAD_REQUEST;
-
+        if ( pos == std::string::npos ){
+            status = HttpCode::BAD_REQUEST;
+            return;
+        }
+    }else if(token[pos] != '/'){
+        status = HttpCode::BAD_REQUEST;
+        return;
+    }
+    
     url = token.substr(pos);
 
+    if(!(iss >> token) ){
+        status = HttpCode::BAD_REQUEST;
+        return;
+    }
 
-    if(!(iss >> token) )
-        return HttpCode::BAD_REQUEST;
-
-    if (strcasecmp(token.c_str(),"HTTP/1.1") && strcasecmp(token.c_str(),"HTTP/1.0") )
-        return HttpCode::BAD_REQUEST;    
+    if (strcasecmp(token.c_str(),"HTTP/1.1") >0 && strcasecmp(token.c_str(),"HTTP/1.0") >0 ){
+        status = HttpCode::BAD_REQUEST;
+        return;
+    }
 
     checkState = CheckState::CHECK_STATE_HEADER;
-    return HttpCode::GET_REQUEST;
+    status = HttpCode::GET_REQUEST;
 }
 
-HttpCode Message::parseHeaders()
+void Message::parseHeaders()
 {
     if ( line.empty() )
     {
         checkState = CheckState::CHECK_STATE_CONTENT;       
     }else if (strncasecmp(line.c_str(), "Connection:",11) == 0){
         size_t pos = line.find_first_not_of ( " \t" , 11 );
-        if(pos == std::string::npos)
-            return HttpCode::BAD_REQUEST;
+        if(pos == std::string::npos){
+            status = HttpCode::BAD_REQUEST;
+            return;
+        }
         if ( strncasecmp( line.c_str()+pos,"close",5) == 0)
             isLinger = false;
     }else if (strncasecmp(line.c_str(), "Content-Length:",15) == 0){
         size_t pos = line.find_first_not_of ( " \t" , 15 );
-        if(pos == std::string::npos)
-            return HttpCode::BAD_REQUEST;
-        contentLength = std::stoul(std::string(line.begin()+pos , line.end() ) );
+        if(pos == std::string::npos){
+            status = HttpCode::BAD_REQUEST;
+            return;
+        }
+        contentLength = std::stoul(std::string(line.substr(pos)) );
     }else if(strncasecmp(line.c_str(),  "Cookie:",7) == 0){
         size_t pos = line.find_first_not_of ( " \t" , 7 );
-        if(pos == std::string::npos)
-            return HttpCode::BAD_REQUEST;
-        cookie = std::string(line.begin()+pos, line.end() );
-    }
+        if(pos == std::string::npos){
+            status = HttpCode::BAD_REQUEST;
+            return;
+        }
+        cookie = line.substr(pos);
+    }   
     
-    return HttpCode::GET_REQUEST;
+    status = HttpCode::GET_REQUEST;
 }
 
-HttpCode Message::processRead()
+void Message::parse()
 {
     while(true)
         if(checkState == CheckState::CHECK_STATE_CONTENT){
             if (contentLength == 0) 
                 break;
-            else if (readBuffer.size() - checkedIdx >= contentLength )
+            else if ( (endIdx+ consts::READ_BUFFER_SIZE - startIdx)%consts::READ_BUFFER_SIZE >= contentLength )
             {
-                requestBody = readBuffer.substr(startIdx ,contentLength);
-                checkedIdx = startIdx + contentLength ;
-                startIdx = checkedIdx;    
+                if(startIdx + contentLength <= consts::READ_BUFFER_SIZE ){
+                    requestBody = readBuffer.substr(startIdx ,contentLength);
+                    startIdx += contentLength;
+                }else{
+                    int newStartIdx= contentLength - (consts::READ_BUFFER_SIZE-startIdx);
+                    requestBody = readBuffer.substr(startIdx) + std::string(readBuffer.begin(),readBuffer.begin() + newStartIdx );
+                    startIdx = newStartIdx;
+                }    
                 break;
-            }else
-                return HttpCode::NO_REQUEST;
+            }else{
+                status = HttpCode::NO_REQUEST;
+                return;
+            }
         }else{
-            HttpCode ret = parseLine();
-            if (ret != HttpCode::GET_REQUEST )
-                return ret;
+            parseLine();
+            if (status != HttpCode::GET_REQUEST )
+                return;
             
             if(checkState == CheckState::CHECK_STATE_REQUESTLINE ){
-                ret = parseRequestLine();
-                if ( ret != HttpCode::GET_REQUEST)
-                    return ret;
-            }else{
-                ret = parseHeaders();
-                if ( ret != HttpCode::GET_REQUEST)
-                    return ret;
+                parseRequestLine();
+                if ( status != HttpCode::GET_REQUEST)
+                    return;
+            }else if(checkState == CheckState::CHECK_STATE_HEADER){
+                parseHeaders();
+                if ( status != HttpCode::GET_REQUEST)
+                    return;
             }
         }
-    return HttpCode::GET_REQUEST;
+    status = HttpCode::GET_REQUEST;
 }
 
-HttpCode Message::process(Router&router){
+void Message::prepare(Router&router){
     
-    HttpCode ret = processRead();//GET,NO,BAD
-    
-    if(ret == HttpCode::NO_REQUEST)
-        return ret;
+    if(status == HttpCode::NO_REQUEST)//GET,NO,BAD
+        return;
 
-    if(ret == HttpCode::GET_REQUEST ){
+    if(status == HttpCode::GET_REQUEST ){
         router.route(this);
-        ret = prepareFile();
+        prepareFile();
     }
-
-    if( ret == HttpCode::BAD_REQUEST || ret == HttpCode::FORBIDDEN_REQUEST || ret == HttpCode::NO_RESOURCE || ret == HttpCode::INTERNAL_ERROR){
+    if( status == HttpCode::BAD_REQUEST || status == HttpCode::FORBIDDEN_REQUEST || status == HttpCode::NO_RESOURCE || status == HttpCode::INTERNAL_ERROR){
         isLinger = false;
         LOG_WARN("Bad HTTP request syntax" );
     }
-    if ( !processWrite(ret) )
-        return HttpCode::CLOSED_CONNECTION;
-
-    return ret;
+    if ( !prepareHeaders(status) )
+        status = HttpCode::CLOSED_CONNECTION; 
 }
 
-HttpCode Message::prepareFile()
+void Message::prepareFile()
 {   
     if(realFilePath.empty() == false ){
-        if (std::filesystem::exists(realFilePath) == false  ){
+        if (std::filesystem::is_regular_file(realFilePath) == false  ){
             LOG_WARN("404 Not Found requested. path: ", realFilePath);
-            return HttpCode::NO_RESOURCE;
+            status = HttpCode::NO_RESOURCE;
+            return;
         }
         if (access(realFilePath.c_str(), R_OK) != 0  ){
             LOG_ERROR("File permission denied (403). WebServer lacks R_OK for path: ", realFilePath);
-            return HttpCode::FORBIDDEN_REQUEST;
+            status = HttpCode::FORBIDDEN_REQUEST;
+            return;
         }
-        if (std::filesystem::is_regular_file(realFilePath) == false )
-            return HttpCode::BAD_REQUEST;
-    
+        
         ioVectorCount = 2;
         ioVectors[1].iov_len = fileSize = std::filesystem::file_size(realFilePath);
         int fd = open(realFilePath.data(), O_RDONLY);
@@ -236,16 +216,18 @@ HttpCode Message::prepareFile()
         if (fileAddress == MAP_FAILED) {
             LOG_ERROR("mmap failed for file: ", realFilePath, " errno: ", errno);
             fileAddress = nullptr;
-            return HttpCode::INTERNAL_ERROR;
+            status = HttpCode::INTERNAL_ERROR;
+            return;
         }
         ioVectors[1].iov_len = fileSize = std::filesystem::file_size(realFilePath);
         
-        return HttpCode::FILE_REQUEST;
+        status = HttpCode::FILE_REQUEST;
+        return;
     }
-    return HttpCode::GET_REQUEST;
+    status = HttpCode::GET_REQUEST;
 }
 
-bool Message::processWrite(HttpCode ret)
+bool Message::prepareHeaders(HttpCode ret)
 {
     if(ret == HttpCode::GET_REQUEST){
         if(
