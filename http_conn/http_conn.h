@@ -70,7 +70,7 @@ class Message{
 
 private:
 
-static std::unordered_map<int,std::string> form ;
+static std::unordered_map<int,std::string> form;
 static std::unordered_map<int,std::string> title;
 
 void parse();
@@ -80,9 +80,6 @@ void parseHeaders();
 
 void prepareFile();
 bool prepareHeaders(HttpCode);
-void prepare(Router&);
-
-HttpCode write(bool,int);
 
 template<typename... Args>
 bool addResponse(Args&&... args ){
@@ -104,7 +101,7 @@ HttpCode status;
 const std::string&readBuffer;
 size_t checkedIdx;
 size_t&startIdx;
-size_t endIdx;
+const size_t& endIdx;
 
 CheckState checkState;
 std::string line;
@@ -129,7 +126,7 @@ char* fileAddress; // 专门用来记录 mmap 的原地址
 size_t fileSize;   // 专门记录文件大小
 
 public:
-    Message(std::string&readBuffer,size_t&headIdx,size_t tailIdx):status(HttpCode::NO_REQUEST),readBuffer(readBuffer),checkedIdx(headIdx),startIdx(headIdx),endIdx(tailIdx),
+    Message(std::string&readBuffer,size_t&startIdx,const size_t&endIdx):status(HttpCode::NO_REQUEST),readBuffer(readBuffer),checkedIdx(startIdx),startIdx(startIdx),endIdx(endIdx),
     checkState(CheckState::CHECK_STATE_REQUESTLINE),method(HttpMethod::GET),isLinger(true),contentLength(0),
     ioVectorCount(1),ioVectorIdx(0),fileAddress(nullptr),fileSize(0)
     {
@@ -149,6 +146,8 @@ public:
     const std::string&getCookie()const {return cookie;}
     void setToken(const std::string&token) {this -> token = token;}
     HttpCode getStatus()const{return status;}
+    HttpCode write(bool,int);
+    void prepare(Router&);
 };
 
 class HttpConn
@@ -161,117 +160,34 @@ private:
     bool isLinger;
     Router&router;
     std::queue<Message>messQueue;
+    std::mutex lock;
     std::string readBuffer;
-    size_t head,tail;
+    size_t startIdx,endIdx;
 
 public:
     HttpConn(bool connectET,int fd,WorkQueue<std::shared_ptr<HttpConn> >& workQueue,Router&router)
-    :isConnectEt(connectET),fd(fd),workQueue(workQueue),isLinger(true),router(router),readBuffer(consts::READ_BUFFER_SIZE,'\0'),head(0),tail(0)
+    :isConnectEt(connectET),fd(fd),workQueue(workQueue),isLinger(true),router(router),readBuffer(consts::READ_BUFFER_SIZE,'\0'),startIdx(0),endIdx(0)
     {}
     ~HttpConn(){
         EpollManager::getInstance().remove(httpChannel.get() );
         close(fd);
     }
 
-    bool read()
-    {
-    if(isConnectEt == false){
-        if(tail - head == consts::READ_BUFFER_SIZE){
-            LOG_WARN("Read buffer overflow (LT). Malicious client? fd: ", fd);
-            return false;
-        }
-        int headIdx(head%consts::READ_BUFFER_SIZE),tailIdx(tail%consts::READ_BUFFER_SIZE); 
-        struct iovec iov[2];
-        int iovCount = 0;
+    bool read();
+    bool write();
 
-        if(tailIdx < headIdx){
-            iovCount = 1;
-            iov[0].iov_base = &readBuffer[tailIdx];
-            iov[0].iov_len = headIdx - tailIdx;
-        }else{
-            iovCount = 2;
-            iov[0].iov_base = &readBuffer[tailIdx];
-            iov[0].iov_len = consts::READ_BUFFER_SIZE - tailIdx;
-            iov[1].iov_base = &readBuffer[0]; 
-            iov[1].iov_len = headIdx;
-        }
-        int bytesRead = readv(fd,iov,iovCount);
-        if (bytesRead > 0 ){
-            tail += bytesRead;    
-        }else if (bytesRead == 0)
-            return false;   
-        else if(errno == EAGAIN || errno == EINTR)
-            return true;
-        
-        HttpCode status ;
-        do{
-            messQueue.emplace(readBuffer,headIdx,tailIdx);
-            status = messQueue.back().getStatus();
-        }while(status == HttpCode::GET_REQUEST );
-        
-        if(status == HttpCode::BAD_REQUEST){
-            readBuffer.clear();
-            head = tail = 0;
-        }
-    }else
-        while (true){    
-            if(tail - head == consts::READ_BUFFER_SIZE){
-                LOG_WARN("Read buffer overflow (ET). Malicious client? fd: ", fd);
-                return false;
-            }
-            int headIdx(head%consts::READ_BUFFER_SIZE),tailIdx(tail%consts::READ_BUFFER_SIZE); 
-            struct iovec iov[2];
-            int iovCount = 0;
-
-            if(tailIdx < headIdx){
-                iovCount = 1;
-                iov[0].iov_base = &readBuffer[tailIdx];
-                iov[0].iov_len = headIdx - tailIdx;
-            }else{
-                iovCount = 2;
-                iov[0].iov_base = &readBuffer[tailIdx];
-                iov[0].iov_len = consts::READ_BUFFER_SIZE - tailIdx;
-                iov[1].iov_base = &readBuffer[0]; 
-                iov[1].iov_len = headIdx;
-            }
-            int bytesRead = readv(fd,iov,iovCount);
-            if (bytesRead > 0 ){
-                tail += bytesRead;    
-            }else if (bytesRead == 0)
-                return false;   
-            else if(errno == EAGAIN || errno == EINTR)
-                return true;
-            
-            HttpCode status ;
-            do{
-                messQueue.emplace(readBuffer,headIdx,tailIdx);
-                status = messQueue.back().getStatus();
-            }while(status == HttpCode::GET_REQUEST );
-            
-            if(status == HttpCode::BAD_REQUEST){
-                readBuffer.clear();
-                head = tail = 0;
-                break;
-            }
-        }
-    
-    return true;
-    }
-    
-
-
-    Channel*getChannel() const { return httpChannel.get(); }
     int getFd() const {return fd;}
     void setChannel(const std::shared_ptr<HttpConn>&self){
         httpChannel = std::make_unique<Channel>(
             fd,
-            [this,self]() ->void { ;this->workQueue.append(self); },
+            [this,self]() ->void { this->workQueue.append(self); },
             [this,self]() ->void { this->workQueue.append(self); },
             [this,self]() ->void { this->workQueue.append(self); }
         );
-    EpollManager::getInstance().add(httpChannel.get(),EPOLLIN | EPOLLRDHUP | EPOLLONESHOT | (isConnectEt ? EPOLLET : static_cast<uint32_t>(0)) );
+    EpollManager::getInstance().add(httpChannel.get(),EPOLLIN | EPOLLPRI |EPOLLRDHUP | EPOLLONESHOT | (isConnectEt ? EPOLLET : static_cast<uint32_t>(0) ) );
     }
     bool getConnectEt() const { return isConnectEt; }
+    uint32_t getRevents()const {return httpChannel->getRevents();}
 };
 
 
@@ -301,7 +217,6 @@ public:
         if(fdToConn[fd])
             fdToConn[fd].reset();
     }
-
 };
 
 

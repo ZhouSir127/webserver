@@ -23,7 +23,7 @@ std::unordered_map<int,std::string> Message::title {
 void Message::parseLine()
 {
     while (checkedIdx < endIdx ){
-        int next = (checkedIdx + 1)%consts::READ_BUFFER_SIZE; 
+        size_t next = (checkedIdx + 1)%consts::READ_BUFFER_SIZE; 
         if ( readBuffer[checkedIdx] == '\r'){
             if ( next == endIdx ){
                 status = HttpCode::NO_REQUEST;
@@ -32,7 +32,7 @@ void Message::parseLine()
                 if(startIdx <= checkedIdx)
                     line = std::string(readBuffer.begin() + startIdx , readBuffer.begin() + checkedIdx);
                 else
-                    line = readBuffer.substr(startIdx)+std::string(readBuffer.begin(),readBuffer.begin() + checkedIdx ) ;
+                    line = readBuffer.substr(startIdx) + std::string(readBuffer.begin(),readBuffer.begin() + checkedIdx ) ;
                 
                 startIdx = checkedIdx = (next+1)%consts::READ_BUFFER_SIZE;
                 
@@ -67,30 +67,24 @@ void Message::parseRequestLine()
         return;
     }
 
+
     if(!(iss >> token) ){
         status = HttpCode::BAD_REQUEST;
         return;
     }
     size_t pos(0);
-
-    if ( strncasecmp(token.c_str(),"http://",7) == 0){
-        pos = token.find_first_of('/',7);
-        if (pos == std::string::npos ){
-            status = HttpCode::BAD_REQUEST;
-            return;
-        }
-    }else if (strncasecmp(token.c_str(),"https://",8) == 0){
-        pos = token.find_first_of('/',8);
-        if ( pos == std::string::npos ){
-            status = HttpCode::BAD_REQUEST;
-            return;
-        }
-    }else if(token[pos] != '/'){
+    
+    if ( strncasecmp(token.c_str(),consts::SCHEME_HTTP.data(),consts::SCHEME_HTTP.size() ) == 0)
+        pos = token.find_first_of('/',consts::SCHEME_HTTP.size() );
+    else if (strncasecmp(token.c_str(),consts::SCHEME_HTTPS.data(),consts::SCHEME_HTTPS.size() ) == 0)
+        pos = token.find_first_of('/',consts::SCHEME_HTTPS.size() );
+    
+    if( pos == std::string::npos || token[pos] != '/'){
         status = HttpCode::BAD_REQUEST;
         return;
-    }
-    
-    url = token.substr(pos);
+    }else
+        url = token.substr(pos);
+
 
     if(!(iss >> token) ){
         status = HttpCode::BAD_REQUEST;
@@ -109,32 +103,30 @@ void Message::parseRequestLine()
 void Message::parseHeaders()
 {
     if ( line.empty() )
-    {
         checkState = CheckState::CHECK_STATE_CONTENT;       
-    }else if (strncasecmp(line.c_str(), "Connection:",11) == 0){
-        size_t pos = line.find_first_not_of ( " \t" , 11 );
+    else if (strncasecmp(line.c_str(), consts::HEADER_CONNECTION.data(),consts::HEADER_CONNECTION.size() ) == 0){
+        size_t pos = line.find_first_not_of ( " \t" , consts::HEADER_CONNECTION.size() );
         if(pos == std::string::npos){
             status = HttpCode::BAD_REQUEST;
             return;
         }
-        if ( strncasecmp( line.c_str()+pos,"close",5) == 0)
+        if ( strncasecmp( line.c_str()+pos,consts::VALUE_CLOSE.data(),consts::VALUE_CLOSE.size() ) == 0)
             isLinger = false;
-    }else if (strncasecmp(line.c_str(), "Content-Length:",15) == 0){
-        size_t pos = line.find_first_not_of ( " \t" , 15 );
+    }else if (strncasecmp(line.c_str(),consts::HEADER_CONTENT_LENGTH.data(),consts::HEADER_CONTENT_LENGTH.size() ) == 0){
+        size_t pos = line.find_first_not_of ( " \t" , consts::HEADER_CONTENT_LENGTH.size() );
         if(pos == std::string::npos){
             status = HttpCode::BAD_REQUEST;
             return;
         }
-        contentLength = std::stoul(std::string(line.substr(pos)) );
-    }else if(strncasecmp(line.c_str(),  "Cookie:",7) == 0){
-        size_t pos = line.find_first_not_of ( " \t" , 7 );
+        contentLength = std::stoul(line.substr(pos));
+    }else if(strncasecmp(line.c_str(), consts::HEADER_COOKIE.data(),consts::HEADER_COOKIE.size() ) == 0){
+        size_t pos = line.find_first_not_of ( " \t" , consts::HEADER_COOKIE.size() );
         if(pos == std::string::npos){
             status = HttpCode::BAD_REQUEST;
             return;
         }
         cookie = line.substr(pos);
-    }   
-    
+    }       
     status = HttpCode::GET_REQUEST;
 }
 
@@ -144,13 +136,12 @@ void Message::parse()
         if(checkState == CheckState::CHECK_STATE_CONTENT){
             if (contentLength == 0) 
                 break;
-            else if ( (endIdx+ consts::READ_BUFFER_SIZE - startIdx)%consts::READ_BUFFER_SIZE >= contentLength )
-            {
+            else if ( (endIdx+ consts::READ_BUFFER_SIZE - startIdx)%consts::READ_BUFFER_SIZE >= contentLength ){
                 if(startIdx + contentLength <= consts::READ_BUFFER_SIZE ){
                     requestBody = readBuffer.substr(startIdx ,contentLength);
                     startIdx += contentLength;
                 }else{
-                    int newStartIdx= contentLength - (consts::READ_BUFFER_SIZE-startIdx);
+                    size_t newStartIdx= contentLength - (consts::READ_BUFFER_SIZE-startIdx);
                     requestBody = readBuffer.substr(startIdx) + std::string(readBuffer.begin(),readBuffer.begin() + newStartIdx );
                     startIdx = newStartIdx;
                 }    
@@ -161,27 +152,115 @@ void Message::parse()
             }
         }else{
             parseLine();
-            if (status != HttpCode::GET_REQUEST )
+            if (status != HttpCode::GET_REQUEST )//NO BAD GET
                 return;
             
             if(checkState == CheckState::CHECK_STATE_REQUESTLINE ){
-                parseRequestLine();
+                if(line.empty() )
+                    continue;
+                parseRequestLine();//BAD GET
                 if ( status != HttpCode::GET_REQUEST)
                     return;
             }else if(checkState == CheckState::CHECK_STATE_HEADER){
                 parseHeaders();
-                if ( status != HttpCode::GET_REQUEST)
+                if ( status != HttpCode::GET_REQUEST) //BAD GET
                     return;
             }
         }
     status = HttpCode::GET_REQUEST;
 }
 
-void Message::prepare(Router&router){
-    
-    if(status == HttpCode::NO_REQUEST)//GET,NO,BAD
-        return;
+bool HttpConn::read(){//false为关闭连接，true为接下来写mess
+    if(isConnectEt == false){
+        if( (endIdx + 1)%consts::READ_BUFFER_SIZE == startIdx){
+            LOG_WARN("Read buffer overflow (LT). Malicious client? fd: ", fd);
+            return true;
+        }
+        
+        struct iovec iov[2];
+        int iovCount = 1;
 
+        if(endIdx < startIdx ){
+            iov[0].iov_base = &readBuffer[endIdx];
+            iov[0].iov_len = startIdx - endIdx;
+        }else{
+            iovCount = 2;
+            iov[0].iov_base = &readBuffer[endIdx];
+            iov[0].iov_len = consts::READ_BUFFER_SIZE - endIdx;
+            iov[1].iov_base = &readBuffer[0]; 
+            iov[1].iov_len = startIdx;
+        }    
+
+        int bytesRead = readv(fd,iov,iovCount);
+        if (bytesRead > 0 )
+            endIdx = (endIdx+bytesRead) % consts::READ_BUFFER_SIZE;    
+        else if (bytesRead == 0)
+            return false;   
+        else if(errno != EAGAIN && errno != EINTR)
+            return false;
+
+        std::lock_guard<std::mutex>Lock(lock);
+        while(true){
+            messQueue.emplace(readBuffer,startIdx,endIdx);
+            if(messQueue.back().getStatus() == HttpCode::GET_REQUEST)
+                messQueue.back().prepare(router);
+            else{
+                if( messQueue.back().getStatus() == HttpCode::BAD_REQUEST){
+                    readBuffer.clear();
+                    startIdx = endIdx = 0;
+                }
+                break;
+            }
+        }
+    }else
+        while (true){    
+            if((endIdx + 1)%consts::READ_BUFFER_SIZE == startIdx ){
+                LOG_WARN("Read buffer overflow (ET). Malicious client? fd: ", fd);
+                return true;
+            }
+     
+            struct iovec iov[2];
+            int iovCount = 1;
+
+            if(endIdx < startIdx){
+                iov[0].iov_base = &readBuffer[endIdx];
+                iov[0].iov_len = startIdx - endIdx;
+            }else{
+                iovCount = 2;
+                iov[0].iov_base = &readBuffer[endIdx];
+                iov[0].iov_len = consts::READ_BUFFER_SIZE - endIdx;
+                iov[1].iov_base = &readBuffer[0]; 
+                iov[1].iov_len = startIdx;
+            }
+            int bytesRead = readv(fd,iov,iovCount);
+            if (bytesRead > 0 )
+                endIdx = (endIdx + bytesRead)%consts::READ_BUFFER_SIZE;    
+            else if (bytesRead == 0)
+                return false;   
+            else if(errno != EAGAIN && errno != EINTR)
+                return false;
+            
+            std::lock_guard<std::mutex>Lock(lock);
+            
+            while(true){
+                messQueue.emplace(readBuffer,startIdx,endIdx);
+                if(messQueue.back().getStatus() == HttpCode::GET_REQUEST)
+                    messQueue.back().prepare(router);
+                else{
+                    if( messQueue.back().getStatus() == HttpCode::BAD_REQUEST){
+                        readBuffer.clear();
+                        startIdx = endIdx = 0;
+                    }
+                    break;
+                }
+            }
+        }
+    EpollManager::getInstance().modify(httpChannel.get(), EPOLLIN | EPOLLPRI | EPOLLOUT | EPOLLRDHUP | EPOLLONESHOT | (isConnectEt ? EPOLLET : static_cast<uint32_t>(0)) );
+    return true;
+}
+
+void Message::prepare(Router&router){
+    //GET,(NO),BAD
     if(status == HttpCode::GET_REQUEST ){
         router.route(this);
         prepareFile();
@@ -190,7 +269,7 @@ void Message::prepare(Router&router){
         isLinger = false;
         LOG_WARN("Bad HTTP request syntax" );
     }
-    if ( !prepareHeaders(status) )
+    if ( prepareHeaders(status) == false )
         status = HttpCode::CLOSED_CONNECTION; 
 }
 
@@ -342,6 +421,30 @@ HttpCode Message::write(bool isConnectEt,int fd)
         return HttpCode::NO_REQUEST;
 }
 
+bool HttpConn::write(){
+    std::lock_guard<std::mutex>Lock(lock);
+    while(messQueue.empty() == false){
+        Message&mess = messQueue.front();
+        if(mess.getStatus() == HttpCode::CLOSED_CONNECTION)
+            return false;
+        else if(mess.getStatus() == HttpCode::NO_REQUEST)
+            return true;
+        else{
+            mess.write(isConnectEt,fd);
+            HttpCode status = mess.getStatus();
 
+            if( status == HttpCode::CLOSED_CONNECTION )
+                return false;
+            else if ( status == HttpCode::NO_REQUEST ){
+                EpollManager::getInstance().modify(httpChannel.get(), EPOLLIN | EPOLLPRI | EPOLLOUT |EPOLLRDHUP | EPOLLONESHOT | (isConnectEt ? EPOLLET : static_cast<uint32_t>(0)) );
+                return true;
+            }else if(status == HttpCode::GET_REQUEST && isLinger == false)
+                return false;        
+        }
+        messQueue.pop();
+    }
+    EpollManager::getInstance().modify(httpChannel.get(), EPOLLIN | EPOLLPRI | EPOLLRDHUP | EPOLLONESHOT | (isConnectEt ? EPOLLET : static_cast<uint32_t>(0)) );
+    return true;
+}
 
 

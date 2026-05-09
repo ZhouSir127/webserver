@@ -19,7 +19,7 @@ public:
     Channel(int fd,EventCallback&&readCb, EventCallback&&writeCb, EventCallback&&errorCb)
     : fd(fd), readCallback(std::move(readCb)), writeCallback(std::move(writeCb)), errorCallback(std::move(errorCb) ) {}
     // 核心：当 epoll 触发时，统一调用此函数
-    void handleEvent(uint32_t);
+    void handleEvent(uint32_t reventsFromEpoll);
     int getFd() const { return fd; }
     uint32_t getRevents()const {return revents;};
 };

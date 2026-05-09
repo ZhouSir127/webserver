@@ -2,8 +2,8 @@
 #include "../http_conn/http_conn.h"
 
 Router::Router(const SqlInfo &sqlInfo, const RedisInfo &redisInfo,const std::string&root)
-    : user(sqlInfo, redisInfo), mavsdkPtr(nullptr), drone(nullptr),
-      action(nullptr), telemetry(nullptr),root(root),
+    : user(sqlInfo, redisInfo),root(root),mavsdkPtr(nullptr), drone(nullptr),
+      action(nullptr), telemetry(nullptr),
       getRoutes{
           {"/login",
            [this](Message *mess) -> void {

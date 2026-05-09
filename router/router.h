@@ -22,7 +22,7 @@ private:
     using HttpHandler = std::function<void(Message*)>;
 
     User user;
-    // 在 router.h 的 private 成员中加入：
+    const std::string&root;
     std::atomic<bool> isConnecting{false};
     std::shared_ptr<mavsdk::Mavsdk> mavsdkPtr;
     std::shared_ptr<mavsdk::System> drone;
@@ -31,7 +31,7 @@ private:
     std::unordered_map<std::string,HttpHandler> getRoutes;
     std::unordered_map<std::string,HttpHandler> postRoutes;
     std::mutex lock;
-    const std::string&root;
+    
     public:
     Router(const SqlInfo&,const RedisInfo&,const std::string&root);
     void route(Message* conn);
