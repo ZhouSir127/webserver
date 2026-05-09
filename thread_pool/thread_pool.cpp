@@ -22,7 +22,7 @@ void ThreadPool::run()
                 death.add(conn -> getFd() );    
             else
                 adjustment.add(conn -> getFd() );
-        }else
+        }else if(conn -> getRevents() & (EPOLLERR | EPOLLRDHUP | EPOLLHUP) )
             death.add(conn->getFd() );
     }
 }

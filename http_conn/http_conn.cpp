@@ -139,7 +139,7 @@ void Message::parse()
             else if ( (endIdx+ consts::READ_BUFFER_SIZE - startIdx)%consts::READ_BUFFER_SIZE >= contentLength ){
                 if(startIdx + contentLength <= consts::READ_BUFFER_SIZE ){
                     requestBody = readBuffer.substr(startIdx ,contentLength);
-                    startIdx += contentLength;
+                    startIdx = (startIdx+contentLength)%consts::READ_BUFFER_SIZE;
                 }else{
                     size_t newStartIdx= contentLength - (consts::READ_BUFFER_SIZE-startIdx);
                     requestBody = readBuffer.substr(startIdx) + std::string(readBuffer.begin(),readBuffer.begin() + newStartIdx );
@@ -197,25 +197,31 @@ bool HttpConn::read(){//false为关闭连接，true为接下来写mess
         }    
 
         int bytesRead = readv(fd,iov,iovCount);
-        if (bytesRead > 0 )
-            endIdx = (endIdx+bytesRead) % consts::READ_BUFFER_SIZE;    
-        else if (bytesRead == 0)
+        if(bytesRead > 0){
+            std::lock_guard<std::mutex>Lock(lock);
+            endIdx = (endIdx+bytesRead) % consts::READ_BUFFER_SIZE;
+            while(true){
+                size_t oldStartIdx = startIdx;
+                Message mess = Message(readBuffer,startIdx,endIdx);
+                
+                if(mess.getStatus() == HttpCode::GET_REQUEST){
+                    mess.prepare(router);
+                    messQueue.emplace(std::move(mess) );
+                }else{
+                    if( mess.getStatus() == HttpCode::BAD_REQUEST){
+                        mess.prepare(router);
+                        messQueue.emplace(std::move(mess) );
+                        startIdx = endIdx = 0;
+                    }else if(mess.getStatus() == HttpCode::NO_REQUEST)
+                        startIdx = oldStartIdx;
+
+                    break;
+                }
+            }
+        }else if (bytesRead == 0)
             return false;   
         else if(errno != EAGAIN && errno != EINTR)
             return false;
-
-        std::lock_guard<std::mutex>Lock(lock);
-        while(true){
-            messQueue.emplace(readBuffer,startIdx,endIdx);
-            if(messQueue.back().getStatus() == HttpCode::GET_REQUEST)
-                messQueue.back().prepare(router);
-            else{
-                if( messQueue.back().getStatus() == HttpCode::BAD_REQUEST)
-                    startIdx = endIdx = 0;
-
-                break;
-            }
-        }
     }else
         while (true){    
             if((endIdx + 1)%consts::READ_BUFFER_SIZE == startIdx ){
@@ -242,26 +248,31 @@ bool HttpConn::read(){//false为关闭连接，true为接下来写mess
                 }
             }
             int bytesRead = readv(fd,iov,iovCount);
-            if (bytesRead > 0 )
+            if (bytesRead > 0 ){
+                std::lock_guard<std::mutex>Lock(lock);
                 endIdx = (endIdx + bytesRead)%consts::READ_BUFFER_SIZE;    
-            else if (bytesRead == 0)
+                while(true){
+                    size_t oldStartIdx = startIdx;
+                    Message mess = Message(readBuffer,startIdx,endIdx);
+                    
+                    if(mess.getStatus() == HttpCode::GET_REQUEST){
+                        mess.prepare(router);
+                        messQueue.emplace(std::move(mess) );
+                    }else{
+                        if( mess.getStatus() == HttpCode::BAD_REQUEST){
+                            mess.prepare(router);
+                            messQueue.emplace(std::move(mess) );
+                            startIdx = endIdx = 0;
+                        }else if(mess.getStatus() == HttpCode::NO_REQUEST)
+                            startIdx = oldStartIdx;
+
+                        break;
+                    }
+                }   
+            }else if (bytesRead == 0)
                 return false;   
             else if(errno != EAGAIN && errno != EINTR)
                 return false;
-            
-            std::lock_guard<std::mutex>Lock(lock);
-            
-            while(true){
-                messQueue.emplace(readBuffer,startIdx,endIdx);
-                if(messQueue.back().getStatus() == HttpCode::GET_REQUEST)
-                    messQueue.back().prepare(router);
-                else{
-                    if( messQueue.back().getStatus() == HttpCode::BAD_REQUEST)
-                        startIdx = endIdx = 0;
-                    
-                    break;
-                }
-            }
         }
     EpollManager::getInstance().modify(httpChannel.get(), EPOLLIN | EPOLLPRI | EPOLLOUT | EPOLLRDHUP | EPOLLONESHOT | (isConnectEt ? EPOLLET : static_cast<uint32_t>(0)) );
     return true;
@@ -269,7 +280,7 @@ bool HttpConn::read(){//false为关闭连接，true为接下来写mess
 
 void Message::prepare(Router&router){
     //GET,(NO),BAD
-    if(status == HttpCode::GET_REQUEST ){
+    if(status == HttpCode::GET_REQUEST){
         router.route(this);
         prepareFile();
     }
@@ -294,22 +305,25 @@ void Message::prepareFile()
             status = HttpCode::FORBIDDEN_REQUEST;
             return;
         }
-        
-        ioVectorCount = 2;
-        ioVectors[1].iov_len = fileSize = std::filesystem::file_size(realFilePath);
-        int fd = open(realFilePath.data(), O_RDONLY);
-        ioVectors[1].iov_base = fileAddress = static_cast<char*>(mmap(0, fileSize,PROT_READ, MAP_PRIVATE, fd, 0));
-        close(fd);
-        if (fileAddress == MAP_FAILED) {
-            LOG_ERROR("mmap failed for file: ", realFilePath, " errno: ", errno);
-            fileAddress = nullptr;
-            status = HttpCode::INTERNAL_ERROR;
+            
+        size_t fileSize = std::filesystem::file_size(realFilePath);
+        if(fileSize > 0){
+            ioVectorCount = 2;
+            ioVectors[1].iov_len = fileSize;
+            int fd = open(realFilePath.data(), O_RDONLY);
+            ioVectors[1].iov_base = fileAddress = static_cast<char*>(mmap(0, fileSize,PROT_READ, MAP_PRIVATE, fd, 0));
+            close(fd);
+            if (fileAddress == MAP_FAILED) {
+                LOG_ERROR("mmap failed for file: ", realFilePath, " errno: ", errno);
+                fileAddress = nullptr;
+                status = HttpCode::INTERNAL_ERROR;
+                return;
+            }
+            ioVectors[1].iov_len = fileSize = std::filesystem::file_size(realFilePath);
+            
+            status = HttpCode::FILE_REQUEST;
             return;
         }
-        ioVectors[1].iov_len = fileSize = std::filesystem::file_size(realFilePath);
-        
-        status = HttpCode::FILE_REQUEST;
-        return;
     }
     status = HttpCode::GET_REQUEST;
 }

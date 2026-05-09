@@ -36,7 +36,10 @@ void Listen::acceptNewConnection()
             send(connfd, info.c_str(), info.length(), 0);
             close(connfd);
             LOG_WARN("Internal server busy. MAX_FD reached. Dropping fd: ", connfd);
-            while(accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength)>0 );
+            
+            while( (connfd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength))>0 )
+                close(connfd);
+        
         }else{
             timerManager.add(connfd);
             httpManager.add(connfd);
@@ -68,7 +71,8 @@ void Listen::acceptNewConnection()
                 send(fd, info.c_str(), info.size(), 0);
                 close(fd);
                 LOG_WARN("Internal server busy (ET). MAX_FD reached. Dropping fd: ", fd);
-                while(accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength)>0 );
+                while( (fd = accept(listenFd, reinterpret_cast<struct sockaddr*>(&client_address), &client_addrlength))>0 )
+                    close(fd);
                 break;
             }else{
                 timerManager.add(fd);
