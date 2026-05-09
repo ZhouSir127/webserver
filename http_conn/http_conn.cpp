@@ -22,7 +22,7 @@ std::unordered_map<int,std::string> Message::title {
 
 void Message::parseLine()
 {
-    while (checkedIdx < endIdx ){
+    while (checkedIdx != endIdx ){
         size_t next = (checkedIdx + 1)%consts::READ_BUFFER_SIZE; 
         if ( readBuffer[checkedIdx] == '\r'){
             if ( next == endIdx ){
@@ -182,13 +182,18 @@ bool HttpConn::read(){//false为关闭连接，true为接下来写mess
 
         if(endIdx < startIdx ){
             iov[0].iov_base = &readBuffer[endIdx];
-            iov[0].iov_len = startIdx - endIdx;
+            iov[0].iov_len = startIdx - endIdx -1;
         }else{
             iovCount = 2;
             iov[0].iov_base = &readBuffer[endIdx];
-            iov[0].iov_len = consts::READ_BUFFER_SIZE - endIdx;
             iov[1].iov_base = &readBuffer[0]; 
-            iov[1].iov_len = startIdx;
+            if(startIdx == 0){
+                iov[0].iov_len = consts::READ_BUFFER_SIZE - endIdx - 1;
+                iov[1].iov_len = 0;
+            }else{
+                iov[0].iov_len = consts::READ_BUFFER_SIZE - endIdx;
+                iov[1].iov_len = startIdx-1;
+            }
         }    
 
         int bytesRead = readv(fd,iov,iovCount);
@@ -205,10 +210,9 @@ bool HttpConn::read(){//false为关闭连接，true为接下来写mess
             if(messQueue.back().getStatus() == HttpCode::GET_REQUEST)
                 messQueue.back().prepare(router);
             else{
-                if( messQueue.back().getStatus() == HttpCode::BAD_REQUEST){
-                    readBuffer.clear();
+                if( messQueue.back().getStatus() == HttpCode::BAD_REQUEST)
                     startIdx = endIdx = 0;
-                }
+
                 break;
             }
         }
@@ -224,13 +228,18 @@ bool HttpConn::read(){//false为关闭连接，true为接下来写mess
 
             if(endIdx < startIdx){
                 iov[0].iov_base = &readBuffer[endIdx];
-                iov[0].iov_len = startIdx - endIdx;
+                iov[0].iov_len = startIdx - endIdx-1;
             }else{
                 iovCount = 2;
                 iov[0].iov_base = &readBuffer[endIdx];
-                iov[0].iov_len = consts::READ_BUFFER_SIZE - endIdx;
                 iov[1].iov_base = &readBuffer[0]; 
-                iov[1].iov_len = startIdx;
+                if(startIdx == 0){
+                    iov[0].iov_len = consts::READ_BUFFER_SIZE - endIdx - 1;
+                    iov[1].iov_len = 0;
+                }else{
+                    iov[0].iov_len = consts::READ_BUFFER_SIZE - endIdx;
+                    iov[1].iov_len = startIdx-1;
+                }
             }
             int bytesRead = readv(fd,iov,iovCount);
             if (bytesRead > 0 )
@@ -247,10 +256,9 @@ bool HttpConn::read(){//false为关闭连接，true为接下来写mess
                 if(messQueue.back().getStatus() == HttpCode::GET_REQUEST)
                     messQueue.back().prepare(router);
                 else{
-                    if( messQueue.back().getStatus() == HttpCode::BAD_REQUEST){
-                        readBuffer.clear();
+                    if( messQueue.back().getStatus() == HttpCode::BAD_REQUEST)
                         startIdx = endIdx = 0;
-                    }
+                    
                     break;
                 }
             }
