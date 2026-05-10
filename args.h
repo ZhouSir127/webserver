@@ -5,46 +5,46 @@
 #include <cstdint>
 
 struct SqlInfo{
-    const std::string&IP;
-    int port;
-    const std::string&account;
-    const std::string&password;
-    const std::string&name;
-    int num;
+    const std::string IP;
+    const int port;
+    const std::string account;
+    const std::string password;
+    const std::string name;
+    const int num;
 };
 
 struct RedisInfo {
-    const std::string&IP;
-    int port;
-    const std::string&password; 
-    int num;              // 连接池大小
+    const std::string IP;
+    const int port;
+    const std::string password; 
+    const int num;              // 连接池大小
 };
 
 struct HttpInfo{
-    bool isConnectEt;
-    const std::string&root;
+    const bool isConnectEt;
+    const std::string root;
 };
 
 struct TimerInfo{
-    int lifeSpan;
-    unsigned int timeSlot;
+    const int lifeSpan;
+    const unsigned int timeSlot;
 };
 
 struct ThreadPoolInfo{
-    size_t threadNumer;
-    size_t maxRequest;
+    const size_t threadNumer;
+    const size_t maxRequest;
 };
 
 struct LogInfo{
-    const std::string&file;
-    bool close;
-    size_t maxRequest;
+    const std::string file;
+    const bool close;
+    const size_t maxRequest;
 };
 
 struct ListenInfo{
-    uint16_t port;
-    bool isListenEt;
-    size_t backlog;
+    const uint16_t port;
+    const bool isListenEt;
+    const size_t backlog;
 };
 
 #endif

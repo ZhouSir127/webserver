@@ -159,7 +159,7 @@ private:
     std::unique_ptr<Channel>httpChannel;
     bool isLinger;
     Router&router;
-    std::queue<Message>messQueue;
+    std::queue<std::unique_ptr<Message> >messQueue;
     std::mutex lock;
     std::string readBuffer;
     size_t startIdx,endIdx;

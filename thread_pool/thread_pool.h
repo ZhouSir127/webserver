@@ -11,7 +11,7 @@
 class ThreadPool
 {
 public:
-    ThreadPool(int threadNumber,WorkQueue<std::shared_ptr<HttpConn> >& workQueue,Set&death,Set&adjustment) 
+    ThreadPool(size_t threadNumber,WorkQueue<std::shared_ptr<HttpConn> >& workQueue,Set&death,Set&adjustment) 
     :threadNumber(threadNumber),workQueue(workQueue),death(death),adjustment(adjustment){
         if (threadNumber <= 0 ) 
             throw std::invalid_argument("Invalid thread pool parameters");

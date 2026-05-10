@@ -202,17 +202,17 @@ bool HttpConn::read(){//false为关闭连接，true为接下来写mess
             endIdx = (endIdx+bytesRead) % consts::READ_BUFFER_SIZE;
             while(true){
                 size_t oldStartIdx = startIdx;
-                Message mess = Message(readBuffer,startIdx,endIdx);
+                std::unique_ptr<Message> mess = std::make_unique<Message>(readBuffer,startIdx,endIdx);
                 
-                if(mess.getStatus() == HttpCode::GET_REQUEST){
-                    mess.prepare(router);
+                if(mess -> getStatus() == HttpCode::GET_REQUEST){
+                    mess -> prepare(router);
                     messQueue.emplace(std::move(mess) );
                 }else{
-                    if( mess.getStatus() == HttpCode::BAD_REQUEST){
-                        mess.prepare(router);
+                    if( mess -> getStatus() == HttpCode::BAD_REQUEST){
+                        mess -> prepare(router);
                         messQueue.emplace(std::move(mess) );
                         startIdx = endIdx = 0;
-                    }else if(mess.getStatus() == HttpCode::NO_REQUEST)
+                    }else if(mess -> getStatus() == HttpCode::NO_REQUEST)
                         startIdx = oldStartIdx;
 
                     break;
@@ -253,22 +253,22 @@ bool HttpConn::read(){//false为关闭连接，true为接下来写mess
                 endIdx = (endIdx + bytesRead)%consts::READ_BUFFER_SIZE;    
                 while(true){
                     size_t oldStartIdx = startIdx;
-                    Message mess = Message(readBuffer,startIdx,endIdx);
+                    std::unique_ptr<Message> mess = std::make_unique<Message>(readBuffer,startIdx,endIdx);
                     
-                    if(mess.getStatus() == HttpCode::GET_REQUEST){
-                        mess.prepare(router);
+                    if(mess -> getStatus() == HttpCode::GET_REQUEST){
+                        mess -> prepare(router);
                         messQueue.emplace(std::move(mess) );
                     }else{
-                        if( mess.getStatus() == HttpCode::BAD_REQUEST){
-                            mess.prepare(router);
+                        if( mess -> getStatus() == HttpCode::BAD_REQUEST){
+                            mess -> prepare(router);
                             messQueue.emplace(std::move(mess) );
                             startIdx = endIdx = 0;
-                        }else if(mess.getStatus() == HttpCode::NO_REQUEST)
+                        }else if(mess -> getStatus() == HttpCode::NO_REQUEST)
                             startIdx = oldStartIdx;
 
                         break;
                     }
-                }   
+                }
             }else if (bytesRead == 0)
                 return false;   
             else if(errno != EAGAIN && errno != EINTR)
@@ -446,24 +446,23 @@ HttpCode Message::write(bool isConnectEt,int fd)
 bool HttpConn::write(){
     std::lock_guard<std::mutex>Lock(lock);
     while(messQueue.empty() == false){
-        Message&mess = messQueue.front();
-        if(mess.getStatus() == HttpCode::CLOSED_CONNECTION)
+        std::unique_ptr<Message> mess = std::move(messQueue.front() );
+        messQueue.pop();
+        if(mess->getStatus() == HttpCode::CLOSED_CONNECTION)
             return false;
-        else if(mess.getStatus() == HttpCode::NO_REQUEST)
+        else if(mess -> getStatus() == HttpCode::NO_REQUEST)
             return true;
         else{
-            mess.write(isConnectEt,fd);
-            HttpCode status = mess.getStatus();
+            mess -> write(isConnectEt,fd);
+            HttpCode status = mess -> getStatus();
 
             if( status == HttpCode::CLOSED_CONNECTION )
                 return false;
             else if ( status == HttpCode::NO_REQUEST ){
-                EpollManager::getInstance().modify(httpChannel.get(), EPOLLIN | EPOLLPRI | EPOLLOUT |EPOLLRDHUP | EPOLLONESHOT | (isConnectEt ? EPOLLET : static_cast<uint32_t>(0)) );
-                return true;
+                continue;
             }else if(status == HttpCode::GET_REQUEST && isLinger == false)
                 return false;        
         }
-        messQueue.pop();
     }
     EpollManager::getInstance().modify(httpChannel.get(), EPOLLIN | EPOLLPRI | EPOLLRDHUP | EPOLLONESHOT | (isConnectEt ? EPOLLET : static_cast<uint32_t>(0)) );
     return true;

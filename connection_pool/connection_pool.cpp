@@ -6,11 +6,11 @@
 #include "../log/log.h"
 
 ConnectionPool::ConnectionPool(const SqlInfo& sqlInfo)
-:IP(sqlInfo.IP),
+:IP(std::move(sqlInfo.IP) ),
 port(sqlInfo.port),
-account(sqlInfo.account),
-password(sqlInfo.password),
-name(sqlInfo.name),
+account(std::move(sqlInfo.account) ),
+password(std::move(sqlInfo.password) ),
+name(std::move(sqlInfo.name) ),
 url ("tcp://" + IP + ":" + std::to_string(port) ),
 driver(get_driver_instance() )
 {
